@@ -12,6 +12,8 @@ interface AuthModalProps {
 export function AuthModal({ isOpen, onClose, mode }: AuthModalProps) {
   const [isSignUp, setIsSignUp] = useState(mode === 'sign-up');
 
+  useEffect(() => { setIsSignUp(mode === 'sign-up'); }, [mode]);
+
   useEffect(() => {
     if (!isOpen) return;
     const esc = (e: KeyboardEvent) => {
@@ -20,16 +22,6 @@ export function AuthModal({ isOpen, onClose, mode }: AuthModalProps) {
     document.addEventListener('keydown', esc);
     return () => document.removeEventListener('keydown', esc);
   }, [isOpen, onClose]);
-
-  useEffect(() => {
-    const hc = () => {
-      const h = window.location.hash;
-      if (h === '#/switch-to-sign-in') setIsSignUp(false);
-      else if (h === '#/switch-to-sign-up') setIsSignUp(true);
-    };
-    window.addEventListener('hashchange', hc);
-    return () => window.removeEventListener('hashchange', hc);
-  }, []);
 
   return (
     <AnimatePresence>
