@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "skills": {
+    "clerk-cli": {
+      "source": "C:\\Users\\sammy\\AppData\\Local\\Temp\\clerk-cli-skill-qlYXRv",
+      "sourceType": "local",
+      "computedHash": "40da1ab8bae6401f5f70657f176473f646ef517279383b0f53a3a6c75603ce68"
+    },
+    "turso-db": {
+      "source": "tursodatabase/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/turso-db/SKILL.md",
+      "computedHash": "07f06663e7281db841a9c3be4e1af0bcac016cd97eb8a280ecf55ab5bfa302f9"
+    }
+  }
+}

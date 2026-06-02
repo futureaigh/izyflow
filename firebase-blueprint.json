@@ -1,0 +1,192 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "displayName"]
+    },
+    "Workspace": {
+      "title": "Workspace",
+      "description": "A workspace for business, personal, or NGO finances",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["Business", "Personal", "NGO"] },
+        "ownerId": { "type": "string" },
+        "currency": { "type": "string", "enum": ["GHS", "USD", "NGN"] },
+        "incomeCategories": { "type": "array", "items": { "type": "string" } },
+        "expenseCategories": { "type": "array", "items": { "type": "string" } },
+        "investmentCategories": { "type": "array", "items": { "type": "string" } },
+        "bankName": { "type": "string" },
+        "bankBranch": { "type": "string" },
+        "accountNumber": { "type": "string" },
+        "mobileMoneyProvider": { "type": "string" },
+        "mobileMoneyNumber": { "type": "string" },
+        "onlinePaymentUrl": { "type": "string" },
+        "paymentMethods": { "type": "array", "items": { "type": "object" } },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "type", "ownerId"]
+    },
+    "Account": {
+      "title": "Account",
+      "description": "Internal account balance (e.g., Tax, Tithe, Savings)",
+      "type": "object",
+      "properties": {
+        "workspaceId": { "type": "string" },
+        "name": { "type": "string" },
+        "balance": { "type": "number" },
+        "currency": { "type": "string" }
+      },
+      "required": ["workspaceId", "name", "balance"]
+    },
+    "AllocationRule": {
+      "title": "Allocation Rule",
+      "description": "Rule for splitting revenue into accounts",
+      "type": "object",
+      "properties": {
+        "workspaceId": { "type": "string" },
+        "name": { "type": "string" },
+        "percentage": { "type": "number" },
+        "targetAccountId": { "type": "string" }
+      },
+      "required": ["workspaceId", "name", "percentage", "targetAccountId"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Professional invoice document",
+      "type": "object",
+      "properties": {
+        "workspaceId": { "type": "string" },
+        "clientName": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "status": { "type": "string", "enum": ["Draft", "Sent", "Paid", "Overdue"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "dueDate": { "type": "string", "format": "date-time" },
+        "items": { "type": "array", "items": { "type": "object" } }
+      },
+      "required": ["workspaceId", "clientName", "amount", "status"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Financial transaction record",
+      "type": "object",
+      "properties": {
+        "workspaceId": { "type": "string" },
+        "type": { "type": "string", "enum": ["Income", "Expense", "Transfer", "Investment"] },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "category": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "description": { "type": "string" },
+        "payeePayer": { "type": "string" }
+      },
+      "required": ["workspaceId", "type", "amount", "date"]
+    },
+    "PricingCalculation": {
+      "title": "Pricing Calculation",
+      "description": "A saved pricing calculation for a client",
+      "type": "object",
+      "properties": {
+        "workspaceId": { "type": "string" },
+        "clientName": { "type": "string" },
+        "billingType": { "type": "string", "enum": ["Product", "Service", "Event", "Retainer"] },
+        "cost": { "type": "number" },
+        "margin": { "type": "number" },
+        "quantity": { "type": "number" },
+        "totalPrice": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "notes": { "type": "string" }
+      },
+      "required": ["workspaceId", "clientName", "cost", "margin", "totalPrice"]
+    },
+    "CatalogItem": {
+      "title": "Catalog Item",
+      "description": "A saved product or service for reusable invoicing",
+      "type": "object",
+      "properties": {
+        "workspaceId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "currency": { "type": "string" },
+        "category": { "type": "string" },
+        "type": { "type": "string", "enum": ["Product", "Service"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["workspaceId", "name", "price", "currency", "type"]
+    },
+    "AnalyticsEvent": {
+      "title": "Analytics Event",
+      "description": "System usage tracking event",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string" },
+        "userId": { "type": "string" },
+        "path": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "userAgent": { "type": "string" },
+        "query": { "type": "string" }
+      }
+    },
+    "IzyError": {
+      "title": "Izy Error",
+      "description": "AI assistant failure log",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "error": { "type": "string" },
+        "query": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "model": { "type": "string" }
+      }
+    },
+    "CMSConfig": {
+      "title": "CMS Config",
+      "description": "Global CMS configuration",
+      "type": "object",
+      "properties": {
+        "logoUrl": { "type": "string" },
+        "sidebarLogoUrl": { "type": "string" },
+        "brandColor": { "type": "string" },
+        "fontFamily": { "type": "string" },
+        "hideBrandName": { "type": "boolean" },
+        "heroHeading": { "type": "string" },
+        "heroSubtext": { "type": "string" },
+        "featuresHeading": { "type": "string" },
+        "featuresSubtext": { "type": "string" },
+        "intelligenceHeading": { "type": "string" },
+        "intelligenceSubtext": { "type": "string" },
+        "ctaHeading": { "type": "string" },
+        "ctaSubtext": { "type": "string" },
+        "services": { "type": "array", "items": { "type": "object" } },
+        "faqs": { "type": "array", "items": { "type": "object" } },
+        "intelligenceItems": { "type": "array", "items": { "type": "object" } },
+        "customDomain": { "type": "string" },
+        "txtRecord": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": { "schema": "User", "description": "User profiles" },
+    "/workspaces/{workspaceId}": { "schema": "Workspace", "description": "Workspaces" },
+    "/workspaces/{workspaceId}/accounts/{accountId}": { "schema": "Account", "description": "Accounts within a workspace" },
+    "/workspaces/{workspaceId}/allocationRules/{ruleId}": { "schema": "AllocationRule", "description": "Allocation rules for a workspace" },
+    "/workspaces/{workspaceId}/invoices/{invoiceId}": { "schema": "Invoice", "description": "Invoices within a workspace" },
+    "/workspaces/{workspaceId}/transactions/{transactionId}": { "schema": "Transaction", "description": "Transactions within a workspace" },
+    "/workspaces/{workspaceId}/pricingCalculations/{calculationId}": { "schema": "PricingCalculation", "description": "Saved pricing calculations" },
+    "/workspaces/{workspaceId}/catalogItems/{itemId}": { "schema": "CatalogItem", "description": "Saved products and services catalog" },
+    "/config/cms": { "schema": "CMSConfig", "description": "Global CMS configuration" },
+    "/analytics/{eventId}": { "schema": "AnalyticsEvent", "description": "System usage events" },
+    "/izy_errors/{errorId}": { "schema": "IzyError", "description": "AI assistant errors" }
+  }
+}

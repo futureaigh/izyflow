@@ -1,0 +1,196 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (Firebase Auth UID)
+    // Fields:
+    //   - email: string (required, email format)
+    //   - displayName: string (required)
+    //   - photoURL: string (optional)
+    //   - createdAt: string (required, ISO 8601)
+    //   - role: string (optional, 'Admin' | 'User')
+    //   - subscription: map (optional)
+    //
+    // Collection: workspaces
+    // Document ID: workspaceId
+    // Fields:
+    //   - name: string (required)
+    //   - type: string (required, 'Business' | 'Personal' | 'NGO')
+    //   - ownerId: string (required, matches creator's UID)
+    //   - currency: string (required)
+    //   - incomeCategories: list (required)
+    //   - expenseCategories: list (required)
+    //   - investmentCategories: list (required)
+    //   - bankName: string (optional)
+    //   - bankBranch: string (optional)
+    //   - accountNumber: string (optional)
+    //   - mobileMoneyProvider: string (optional)
+    //   - mobileMoneyNumber: string (optional)
+    //   - onlinePaymentUrl: string (optional)
+    //   - paymentMethods: list (optional)
+    //   - createdAt: string (required, ISO 8601)
+    //   - updatedAt: string (required, ISO 8601)
+    //
+    // Collection: workspaces/{workspaceId}/accounts
+    // Fields: name, balance, currency, workspaceId
+    //
+    // Collection: workspaces/{workspaceId}/invoices
+    // Fields: clientName, amount, status, workspaceId, etc.
+    //
+    // Collection: workspaces/{workspaceId}/transactions
+    // Fields: type, amount, category, date, workspaceId, etc.
+    //
+    // Collection: config
+    // Document ID: cms
+    // Fields: Global branding and landing page content
+    //
+    // Collection: analytics
+    // Fields: path, timestamp, userId, userAgent
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        ((request.auth.token.email == "palmersarkodee@gmail.com" && request.auth.token.email_verified == true) ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin');
+    }
+
+    function isWorkspaceOwner(workspaceId) {
+      return isAuthenticated() && 
+        ((request.auth.token.email == "palmersarkodee@gmail.com" && request.auth.token.email_verified == true) ||
+         get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.ownerId == request.auth.uid);
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.email is string && data.email.size() <= 200 &&
+             data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 100 &&
+             isValidDateString(data.createdAt) &&
+             (!('lastSeen' in data) || isValidDateString(data.lastSeen));
+    }
+
+    function isValidWorkspace(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.type in ['Business', 'Personal', 'NGO'] &&
+             data.ownerId == request.auth.uid &&
+             data.currency is string && data.currency.size() <= 10 &&
+             isValidDateString(data.createdAt) &&
+             isValidDateString(data.updatedAt);
+    }
+
+    function isValidTransaction(data) {
+      return data.type in ['Income', 'Expense', 'Transfer', 'Investment'] &&
+             data.amount is number && data.amount >= 0 &&
+             data.category is string &&
+             isValidDateString(data.createdAt);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // User Profiles
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(incoming()) && 
+                      (!('role' in incoming()) || incoming().role == 'User' || isAdmin());
+      allow update: if isAuthenticated() && (
+        (isOwner(userId) && isValidUser(incoming()) && 
+         (incoming().role == existing().role || isAdmin())) || 
+        isAdmin()
+      );
+    }
+
+    // Workspaces
+    match /workspaces/{workspaceId} {
+      allow get: if isAuthenticated() && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isAuthenticated() && (resource.data.ownerId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidWorkspace(incoming()) && isValidId(workspaceId);
+      allow update: if isAuthenticated() && (
+        (existing().ownerId == request.auth.uid && isValidWorkspace(incoming()) && 
+         incoming().ownerId == existing().ownerId) || 
+        isAdmin()
+      );
+      allow delete: if isAuthenticated() && (existing().ownerId == request.auth.uid || isAdmin());
+
+      // Subcollections within workspaces (Transactions, Invoices, Accounts, Rules, CatalogItems)
+      match /catalogItems/{itemId} {
+        allow read: if true;
+        allow write: if isAuthenticated() && (isWorkspaceOwner(workspaceId) || isAdmin());
+      }
+
+      match /{subcollection}/{documentId} {
+        allow read: if isAuthenticated() && (isWorkspaceOwner(workspaceId) || isAdmin());
+        allow write: if isAuthenticated() && (isWorkspaceOwner(workspaceId) || isAdmin());
+      }
+    }
+
+    // CMS Configuration
+    match /config/cms {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Mail
+    match /mail/{mailId} {
+      allow create: if isAuthenticated() && incoming().to == request.auth.token.email;
+    }
+
+    // Analytics & Logs
+    match /analytics/{docId} {
+      allow create: if true; // Public tracking
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /izy_errors/{errorId} {
+      allow create: if isAuthenticated();
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Default deny
+    match /{allPaths=**} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

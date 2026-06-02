@@ -1,0 +1,10 @@
+# Antigravity Rules
+
+## Shell Execution (Windows)
+- ENV: Windows. Always use 'cmd /c' for all shell executions instead of standard calls.
+- Force shell executions to terminate.
+
+## Package Management
+- Always check the workspace root for the presence of `pnpm-lock.yaml` or `package-lock.json` before executing commands to determine whether the project uses `pnpm` or `npm`.
+- Run commands using the detected package manager accordingly.
+
