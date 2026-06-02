@@ -201,7 +201,7 @@ export default function App({ auth }: AppProps) {
           setLoading(true);
           setWorkspacesLoading(true);
           
-          // Get JWT token from Clerk (or mock auth) and register it in API client
+          // Get token and register it in API client
           const token = await auth.getToken();
           setAuthToken(token);
 

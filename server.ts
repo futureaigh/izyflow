@@ -4,8 +4,6 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import cors from "cors";
-import { clerkMiddleware, getAuth } from "@clerk/express";
-
 // Drizzle and DB imports
 import { db } from "./src/db/index";
 import { 
@@ -19,29 +17,17 @@ import { eq, and } from "drizzle-orm";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Auth Middlewares supporting both Clerk and Mock Developer setups
+const DEV_USER = { userId: "dev-user", email: "developer@example.com" };
+
 const authMiddleware = () => {
-  if (process.env.CLERK_SECRET_KEY) {
-    return clerkMiddleware();
-  }
-  return (req: any, res: any, next: any) => {
-    req.auth = { userId: "mock-clerk-user-id", email: "mock-user@example.com" };
+  return (req: any, _res: any, next: any) => {
+    req.auth = DEV_USER;
     next();
   };
 };
 
 const requireAuthMiddleware = () => {
-  if (process.env.CLERK_SECRET_KEY) {
-    return (req: any, res: any, next: any) => {
-      const auth = getAuth(req);
-      if (!auth.userId) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-      req.auth = auth;
-      next();
-    };
-  }
-  return (req: any, res: any, next: any) => {
+  return (req: any, _res: any, next: any) => {
     next();
   };
 };
