@@ -366,6 +366,7 @@ export default function App({ auth }: AppProps) {
   const handleSignOut = async () => {
     try {
       await auth.signOut();
+      setAuthToken(null);
       toast.success('Signed out successfully');
     } catch (error) {
       toast.error('Failed to sign out');

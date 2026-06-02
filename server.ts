@@ -4,6 +4,7 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import cors from "cors";
+import { clerkMiddleware, requireAuth, getAuth } from "@clerk/express";
 // Drizzle and DB imports
 import { db } from "./src/db/index";
 import { 
@@ -17,19 +18,19 @@ import { eq, and } from "drizzle-orm";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const DEV_USER = { userId: "dev-user", email: "developer@example.com" };
-
 const authMiddleware = () => {
   return (req: any, _res: any, next: any) => {
-    req.auth = DEV_USER;
+    const auth = getAuth(req);
+    req.auth = {
+      userId: auth.userId,
+      email: auth.sessionClaims?.email as string ?? "",
+    };
     next();
   };
 };
 
 const requireAuthMiddleware = () => {
-  return (req: any, _res: any, next: any) => {
-    next();
-  };
+  return requireAuth();
 };
 
 // Helper to safely parse JSON strings
@@ -49,7 +50,8 @@ async function startServer() {
   app.use(cors());
   app.use(express.json());
   
-  // Register Auth Middleware
+  // Register Clerk Auth Middleware
+  app.use(clerkMiddleware());
   app.use(authMiddleware());
 
   // Paystack Integration Endpoint
