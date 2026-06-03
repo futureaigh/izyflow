@@ -157,6 +157,7 @@ export default function App({ auth }: AppProps) {
       setActiveTab('dashboard');
       setTabHistory(['dashboard']);
       setHistoryIndex(0);
+      setIsAuthModalOpen(false);
     }
   }, [user?.uid]);
   
@@ -448,7 +449,7 @@ export default function App({ auth }: AppProps) {
     }
   };
 
-  if (loading || isConfigLoading || (auth.isSignedIn && workspacesLoading)) {
+  if (!auth.isLoaded || loading || isConfigLoading || (auth.isSignedIn && !user)) {
     return (
       <div className="min-h-screen bg-[#050505] flex items-center justify-center">
         <motion.div
