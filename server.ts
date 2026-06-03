@@ -4,7 +4,7 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import cors from "cors";
-import { clerkMiddleware, requireAuth, getAuth } from "@clerk/express";
+import { clerkMiddleware, getAuth, clerkClient } from "@clerk/express";
 // Drizzle and DB imports
 import { db } from "./src/db/index";
 import { 
@@ -18,19 +18,15 @@ import { eq, and } from "drizzle-orm";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const authMiddleware = () => {
-  return (req: any, _res: any, next: any) => {
+const requireAuthMiddleware = () => {
+  return (req: any, res: any, next: any) => {
     const auth = getAuth(req);
-    req.auth = {
-      userId: auth.userId,
-      email: auth.sessionClaims?.email as string ?? "",
-    };
+    if (!auth?.userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    req.auth = { userId: auth.userId };
     next();
   };
-};
-
-const requireAuthMiddleware = () => {
-  return requireAuth();
 };
 
 // Helper to safely parse JSON strings
@@ -45,14 +41,13 @@ function safeParse(str: string | null | undefined) {
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   app.use(cors());
   app.use(express.json());
   
   // Register Clerk Auth Middleware
   app.use(clerkMiddleware());
-  app.use(authMiddleware());
 
   // Paystack Integration Endpoint
   app.post("/api/paystack/initialize", async (req, res) => {
@@ -127,15 +122,20 @@ async function startServer() {
   // --- USER PROFILE ENDPOINTS ---
   app.get("/api/users/me", requireAuthMiddleware(), async (req: any, res) => {
     const userId = req.auth.userId;
-    const email = req.auth.email || "user@example.com";
     try {
       let [profile] = await db.select().from(users).where(eq(users.uid, userId));
       if (!profile) {
-        // Create default user profile if not exists
+        // Fetch real email from Clerk API
+        let email = "";
+        try {
+          const clerkUser = await clerkClient.users.getUser(userId);
+          email = clerkUser.emailAddresses?.[0]?.emailAddress ?? "";
+        } catch {}
+        const displayName = email ? email.split("@")[0] : "User";
         const newUser = {
           uid: userId,
-          email: email,
-          displayName: email.split("@")[0] || "User",
+          email,
+          displayName,
           createdAt: new Date().toISOString(),
           role: "User",
           subscription: JSON.stringify({ plan: "Free", status: "Active" }),
@@ -783,8 +783,9 @@ async function startServer() {
         const defaultConfig = {
           id: "cms",
           siteName: "IzyFlow",
-          heroHeading: "Run and deploy your AI Studio app",
-          heroSubtext: "This contains everything you need to run your app locally.",
+          heroBadgeText: "IzyInvoice is now IzyFlow!",
+          heroHeading: "Track Your Money. Know Your Business",
+          heroSubtext: "Send invoices, track your money and understand your business clearly with built-in tools to help you price your work right.",
           faqs: JSON.stringify([]),
           services: JSON.stringify([]),
           hideBrandName: false

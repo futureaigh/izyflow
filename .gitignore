@@ -1,4 +1,6 @@
 .agents/
+.claude/
+AGENTS.md
 node_modules/
 build/
 dist/
@@ -7,3 +9,4 @@ coverage/
 *.log
 .env*
 !.env.example
+izyflow-beta/

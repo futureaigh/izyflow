@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { doc, getDoc, setDoc, onSnapshot, collection, query, orderBy, limit, getDocs, updateDoc, where } from 'firebase/firestore';
+import { api } from '../lib/api';
+import { db } from '../firebase';
+import { doc, onSnapshot, collection, query, orderBy, limit, getDocs, updateDoc, where } from 'firebase/firestore';
 import { CMSConfig, UserProfile, FAQItem, ServiceItem, UserRole, Visit } from '../types';
 import { motion } from 'motion/react';
 import { Settings, Image as ImageIcon, Type, Layout, Save, Loader2, ShieldCheck, ChevronRight, Globe, Palette, FileText, Plus, Trash2, HelpCircle, Briefcase, Upload, BarChart3, Users, Home, MessageCircle, AlertTriangle, Clock } from 'lucide-react';
@@ -164,14 +165,10 @@ export function AdminPortal({ user, initialConfig, isConfigLoading }: AdminPorta
     setSaving(true);
     console.log('Saving CMS Config:', config);
     try {
-      // Remove id from the object before saving to Firestore to avoid schema pollution
-      const { id, ...configToSave } = config;
-      console.log('Config to save (keys):', Object.keys(configToSave));
-      await setDoc(doc(db, 'config', 'cms'), configToSave);
+      await api.updateCMSConfig(config);
       toast.success('Configuration saved successfully');
     } catch (error) {
       console.error('Save Error Details:', error);
-      handleFirestoreError(error, OperationType.WRITE, 'config/cms');
       toast.error('Failed to save configuration');
     } finally {
       setSaving(false);
