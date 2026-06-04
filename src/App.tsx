@@ -513,7 +513,11 @@ export default function App({ auth }: AppProps) {
     if (!user && !loading) {
       return (
         <>
-          <LandingPage onGetStarted={() => clerk.openSignUp({})} onLogin={() => clerk.openSignIn({})} config={cmsConfig} />
+          <LandingPage 
+            onGetStarted={() => clerk.openSignUp({ forceRedirectUrl: window.location.origin })} 
+            onLogin={() => clerk.openSignIn({ forceRedirectUrl: window.location.origin })} 
+            config={cmsConfig} 
+          />
           <Toaster position="top-right" />
         </>
       );
@@ -535,7 +539,11 @@ export default function App({ auth }: AppProps) {
   if (!user) {
     return (
       <>
-        <LandingPage onGetStarted={() => clerk.openSignUp({})} onLogin={() => clerk.openSignIn({})} config={cmsConfig} />
+        <LandingPage 
+          onGetStarted={() => clerk.openSignUp({ forceRedirectUrl: window.location.origin })} 
+          onLogin={() => clerk.openSignIn({ forceRedirectUrl: window.location.origin })} 
+          config={cmsConfig} 
+        />
         <Toaster position="top-right" />
       </>
     );
