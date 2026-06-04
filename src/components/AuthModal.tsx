@@ -22,7 +22,15 @@ export function AuthModal({ isOpen, onClose, mode }: AuthModalProps) {
     document.addEventListener('keydown', esc);
     return () => document.removeEventListener('keydown', esc);
   }, [isOpen, onClose]);
-
+  useEffect(() => {
+    if (isOpen) {
+      window.location.hash = isSignUp ? '#/sign-up' : '#/sign-in';
+    } else {
+      if (window.location.hash.includes('sign-in') || window.location.hash.includes('sign-up')) {
+        window.location.hash = '';
+      }
+    }
+  }, [isOpen, isSignUp]);
   return (
     <AnimatePresence>
       {isOpen && (
@@ -49,9 +57,9 @@ export function AuthModal({ isOpen, onClose, mode }: AuthModalProps) {
               ✕
             </button>
             {isSignUp ? (
-              <SignUp routing="hash" signInUrl="#/switch-to-sign-in" />
+              <SignUp routing="hash" signInUrl="#/sign-in" />
             ) : (
-              <SignIn routing="hash" signUpUrl="#/switch-to-sign-up" />
+              <SignIn routing="hash" signUpUrl="#/sign-up" />
             )}
             <div className="mt-4 text-center">
               <Button
