@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useClerk } from '@clerk/react';
 import { api, setAuthToken } from './lib/api';
 import { Workspace, UserProfile, CMSConfig } from './types';
 import { Sidebar } from './components/Sidebar';
@@ -43,6 +44,7 @@ interface AppProps {
 }
 
 export default function App({ auth }: AppProps) {
+  const clerk = useClerk();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [workspacesLoading, setWorkspacesLoading] = useState(true);
@@ -511,12 +513,7 @@ export default function App({ auth }: AppProps) {
     if (!user && !loading) {
       return (
         <>
-          <LandingPage onGetStarted={() => { setAuthModalMode('sign-up'); setIsAuthModalOpen(true); }} onLogin={() => { setAuthModalMode('sign-in'); setIsAuthModalOpen(true); }} config={cmsConfig} />
-          <AuthModal key={authModalMode}
-            mode={authModalMode}
-            isOpen={isAuthModalOpen} 
-            onClose={() => setIsAuthModalOpen(false)} 
-          />
+          <LandingPage onGetStarted={() => clerk.openSignUp({})} onLogin={() => clerk.openSignIn({})} config={cmsConfig} />
           <Toaster position="top-right" />
         </>
       );
@@ -538,12 +535,7 @@ export default function App({ auth }: AppProps) {
   if (!user) {
     return (
       <>
-        <LandingPage onGetStarted={() => { setAuthModalMode('sign-up'); setIsAuthModalOpen(true); }} onLogin={() => { setAuthModalMode('sign-in'); setIsAuthModalOpen(true); }} config={cmsConfig} />
-        <AuthModal key={authModalMode}
-          mode={authModalMode}
-          isOpen={isAuthModalOpen} 
-          onClose={() => setIsAuthModalOpen(false)} 
-        />
+        <LandingPage onGetStarted={() => clerk.openSignUp({})} onLogin={() => clerk.openSignIn({})} config={cmsConfig} />
         <Toaster position="top-right" />
       </>
     );
