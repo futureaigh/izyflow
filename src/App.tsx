@@ -81,8 +81,33 @@ export default function App({ auth }: AppProps) {
     }
   };
 
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [authModalMode, setAuthModalMode] = useState<'sign-in' | 'sign-up'>('sign-in');
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(() => {
+    const hash = window.location.hash;
+    const search = window.location.search;
+    return hash.includes('sign-in') || hash.includes('sign-up') || hash.includes('sso-callback') || search.includes('__clerk');
+  });
+  const [authModalMode, setAuthModalMode] = useState<'sign-in' | 'sign-up'>(() => {
+    const hash = window.location.hash;
+    return hash.includes('sign-up') ? 'sign-up' : 'sign-in';
+  });
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash;
+      const search = window.location.search;
+      if (hash.includes('sign-in') || hash.includes('sign-up') || hash.includes('sso-callback') || search.includes('__clerk')) {
+        setIsAuthModalOpen(true);
+        if (hash.includes('sign-up')) {
+          setAuthModalMode('sign-up');
+        } else if (hash.includes('sign-in')) {
+          setAuthModalMode('sign-in');
+        }
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    handleHashChange();
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
   const [cmsConfig, setCmsConfig] = useState<CMSConfig | null>(() => {
     const cached = localStorage.getItem('cms_config');
     return cached ? JSON.parse(cached) : null;
