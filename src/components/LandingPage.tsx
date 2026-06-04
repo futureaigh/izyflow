@@ -146,7 +146,7 @@ export function LandingPage({ onGetStarted, onLogin, config }: LandingPageProps)
               <span className="text-[11px] font-black tracking-widest text-white uppercase drop-shadow-sm">🚀 Now in Public Beta • {heroBadgeText}</span>
             </motion.div>
             
-            <h1 className="text-5xl sm:text-7xl md:text-8xl lg:text-[10rem] font-black tracking-tight mb-10 leading-[0.82]">
+            <h1 className="text-5xl sm:text-7xl md:text-8xl lg:text-[10rem] font-black tracking-tight mb-10 leading-[0.95]">
               {heroHeading}
             </h1>
             

@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "./src/loadEnv";
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";

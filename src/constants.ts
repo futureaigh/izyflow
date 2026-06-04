@@ -1,6 +1,6 @@
 import { Currency } from "./types";
 
-export const LOGO_URL = "https://picsum.photos/seed/finance/200/200";
+export const LOGO_URL = "/logo.png";
 
 export const EXCHANGE_RATES: Record<Currency, number> = {
   GHS: 1,
