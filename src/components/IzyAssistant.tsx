@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Type } from "@google/genai";
 import { motion, AnimatePresence } from 'motion/react';
+import ReactMarkdown from 'react-markdown';
 import { api } from '../lib/api';
 import { X, Send, Bot, User, Loader2, MessageSquare, Sparkles, Check, AlertCircle, PieChart as ChartIcon, TrendingUp, TrendingDown, DollarSign, Download } from 'lucide-react';
 import { Transaction, Invoice, Account, Workspace, TransactionType, UserProfile } from '../types';
@@ -838,7 +839,9 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
                       ? "bg-blue-600 text-white rounded-tr-none" 
                       : "bg-muted text-foreground rounded-tl-none"
                   )}>
-                    {m.content}
+                    <ReactMarkdown className="prose prose-sm dark:prose-invert max-w-none text-inherit leading-relaxed break-words font-medium">
+                      {m.content}
+                    </ReactMarkdown>
                   </div>
 
                   {m.pendingTransaction && (

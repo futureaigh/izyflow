@@ -51,7 +51,7 @@ async function startServer() {
   // Register Clerk Auth Middleware (excludes webhook route and health check)
   app.use(clerkMiddleware({
     excludedRoutes: ['/api/webhooks/clerk', '/api/health']
-  }));
+  } as any));
 
   // ============================================
   // HEALTH CHECK ENDPOINT
@@ -135,7 +135,7 @@ async function startServer() {
       }
       
       if (evt.type === "session.ended" || evt.type === "session.revoked") {
-        const { user_id } = evt.data;
+        const { user_id } = evt.data as any;
         await db.update(users)
           .set({ lastSeen: new Date().toISOString() })
           .where(eq(users.uid, user_id));
@@ -145,7 +145,7 @@ async function startServer() {
       
       // ==================== SUBSCRIPTION EVENTS ====================
       if (evt.type === "subscription.created") {
-        const { user_id, status, plan_id } = evt.data;
+        const { user_id, status, plan_id } = evt.data as any;
         const [existing] = await db.select().from(users).where(eq(users.uid, user_id));
         if (existing) {
           const currentSubscription = safeParse(existing.subscription) || { plan: "Free", status: "Active" };
@@ -163,7 +163,7 @@ async function startServer() {
       }
       
       if (evt.type === "subscription.updated") {
-        const { user_id, status, plan_id } = evt.data;
+        const { user_id, status, plan_id } = evt.data as any;
         const [existing] = await db.select().from(users).where(eq(users.uid, user_id));
         if (existing) {
           const currentSubscription = safeParse(existing.subscription) || { plan: "Free", status: "Active" };
@@ -181,7 +181,7 @@ async function startServer() {
       }
       
       if (evt.type === "subscription.active") {
-        const { user_id, plan_id } = evt.data;
+        const { user_id, plan_id } = evt.data as any;
         const [existing] = await db.select().from(users).where(eq(users.uid, user_id));
         if (existing) {
           const currentSubscription = safeParse(existing.subscription) || { plan: "Free", status: "Active" };
@@ -199,7 +199,7 @@ async function startServer() {
       }
       
       if (evt.type === "subscription.pastDue") {
-        const { user_id } = evt.data;
+        const { user_id } = evt.data as any;
         const [existing] = await db.select().from(users).where(eq(users.uid, user_id));
         if (existing) {
           const currentSubscription = safeParse(existing.subscription) || { plan: "Free", status: "Active" };
@@ -217,14 +217,14 @@ async function startServer() {
       
       // ==================== EMAIL EVENTS ====================
       if (evt.type === "email.created") {
-        const { user_id, email_address, verification } = evt.data;
+        const { user_id, email_address, verification } = evt.data as any;
         console.log(`✅ Email created for user ${user_id}: ${email_address} (verified: ${verification?.status})`);
         // Future: Track email verification status for analytics
       }
       
       // ==================== SMS EVENTS ====================
       if (evt.type === "sms.created") {
-        const { user_id, phone_number, verification } = evt.data;
+        const { user_id, phone_number, verification } = evt.data as any;
         console.log(`✅ SMS created for user ${user_id}: ${phone_number} (verified: ${verification?.status})`);
         // Future: Track phone verification status for analytics
       }
@@ -450,7 +450,7 @@ async function startServer() {
         incomeCategories: safeParse(updated.incomeCategories),
         expenseCategories: safeParse(updated.expenseCategories),
         investmentCategories: safeParse(updated.investmentCategories),
-        paymentMethods: safeParse(updated.paymentMethods),
+        paymentMethods: safeParse((updated as any).paymentMethods),
       });
     } catch (err) {
       console.error("Error in PUT /api/workspaces:", err);
@@ -1143,6 +1143,7 @@ async function startServer() {
         id: invoiceId,
         workspaceId,
         clientName: customerName,
+        clientBusinessName: customerName,
         clientEmail: customerEmail,
         amount: cartTotal,
         currency: ws.currency,
