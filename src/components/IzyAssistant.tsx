@@ -4,8 +4,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, Send, Bot, User, Loader2, MessageSquare, Sparkles, Check, AlertCircle, PieChart as ChartIcon, TrendingUp, TrendingDown, DollarSign, Download } from 'lucide-react';
 import { Transaction, Invoice, Account, Workspace, TransactionType, UserProfile } from '../types';
 import { cn } from '../lib/utils';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, addDoc, deleteDoc, doc, updateDoc, writeBatch } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, LineChart, Line } from 'recharts';
 import { exportToCSV, exportToPDF } from '../lib/dataEngine';

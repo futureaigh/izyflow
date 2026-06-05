@@ -14,7 +14,7 @@ import { Calculator } from './components/Calculator';
 import { Catalog } from './components/Catalog';
 import { Receipts } from './components/Receipts';
 import { PublicCatalog } from './components/PublicCatalog';
-import { LandingPage } from './components/LandingPage';
+// import { LandingPageOptimized } from './components/LandingPageOptimized';
 import { AuthModal } from './components/AuthModal';
 import { AdminPortal } from './components/AdminPortal';
 import { SupportChat } from './components/SupportChat';
@@ -208,9 +208,7 @@ export default function App({ auth }: AppProps) {
 
     const fetchCMS = async () => {
       try {
-        // Use local storage for CMS config (frontend-only approach)
-        const storedConfig = localStorage.getItem('cms_config');
-        const config = storedConfig ? JSON.parse(storedConfig) : null;
+        const config = await api.getCMSConfig();
         setCmsConfig(config);
         setIsConfigLoading(false);
       } catch (error) {
@@ -231,21 +229,17 @@ export default function App({ auth }: AppProps) {
           setLoading(true);
           setWorkspacesLoading(true);
           
-          // Use Clerk's user data directly
-          const profile: UserProfile = {
-            uid: auth.userId!,
-            email: auth.email!,
-            displayName: auth.displayName || auth.email?.split('@')[0] || 'User',
-            photoURL: auth.photoURL || null,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          };
+          // Get token and register it in API client
+          const token = await auth.getToken();
+          setAuthToken(token);
+
+          // Get/Create User profile on backend
+          const profile = await api.getMe();
           setUser(profile);
           localStorage.setItem(`user_profile_${profile.uid}`, JSON.stringify(profile));
 
-          // Load workspaces from local storage (frontend-only approach)
-          const storedWorkspaces = localStorage.getItem(`workspaces_${profile.uid}`);
-          const ws = storedWorkspaces ? JSON.parse(storedWorkspaces) : [];
+          // Fetch Workspaces
+          const ws = await api.getWorkspaces();
           setWorkspaces(ws);
           setActiveWorkspace(current => current ? (ws.find(w => w.id === current.id) || current) : (ws.length > 0 ? ws[0] : null));
           
@@ -519,11 +513,12 @@ export default function App({ auth }: AppProps) {
     if (!user && !loading) {
       return (
         <>
-          <LandingPage 
-            onGetStarted={() => clerk.openSignUp({ forceRedirectUrl: window.location.origin })} 
-            onLogin={() => clerk.openSignIn({ forceRedirectUrl: window.location.origin })} 
-            config={cmsConfig} 
-          />
+          <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center">
+            <div className="text-center">
+              <h1 className="text-5xl font-bold mb-4">IzyFlow</h1>
+              <p className="text-gray-400">Please sign in to continue</p>
+            </div>
+          </div>
           <Toaster position="top-right" />
         </>
       );
@@ -545,11 +540,12 @@ export default function App({ auth }: AppProps) {
   if (!user) {
     return (
       <>
-        <LandingPage 
-          onGetStarted={() => clerk.openSignUp({ forceRedirectUrl: window.location.origin })} 
-          onLogin={() => clerk.openSignIn({ forceRedirectUrl: window.location.origin })} 
-          config={cmsConfig} 
-        />
+        <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center">
+          <div className="text-center">
+            <h1 className="text-5xl font-bold mb-4">IzyFlow</h1>
+            <p className="text-gray-400">Please sign in to continue</p>
+          </div>
+        </div>
         <Toaster position="top-right" />
       </>
     );
@@ -942,3 +938,5 @@ export default function App({ auth }: AppProps) {
     </div>
   );
 }
+
+

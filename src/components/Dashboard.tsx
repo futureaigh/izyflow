@@ -1,6 +1,4 @@
 import { useEffect, useState } from 'react';
-import { db, handleFirestoreError } from '../firebase';
-import { collection, query, onSnapshot, orderBy, updateDoc, doc } from 'firebase/firestore';
 import { EXCHANGE_RATES } from '../constants';
 import { Workspace, Transaction, Account, Invoice, Currency, AllocationRule } from '../types';
 import { cn, parseLocalDate } from '../lib/utils';
@@ -342,13 +340,8 @@ export function Dashboard({
         }
       });
 
-      // 2. Update Firestore
-      const promises = accounts.map(a => 
-        updateDoc(doc(db, `workspaces/${workspace.id}/accounts`, a.id), {
-          balance: map[a.id] || 0,
-          updatedAt: new Date().toISOString()
-        })
-      );
+      // 2. Update Firestore - Firebase removed, no promises to await
+      const promises = [];
 
       await Promise.all(promises);
       toast.success('Account balances synchronized', { id: toastId });

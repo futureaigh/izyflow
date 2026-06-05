@@ -1,6 +1,4 @@
 import { useState, useEffect } from 'react';
-import { db, handleFirestoreError } from '../firebase';
-import { collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc, query, orderBy } from 'firebase/firestore';
 import { Workspace, Staff, StaffReceipt, StaffReceiptItem, Currency } from '../types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Button } from './ui/button';

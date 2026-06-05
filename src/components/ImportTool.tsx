@@ -6,8 +6,6 @@ import { Button } from './ui/button';
 import { cn, getFinancialFlags } from '../lib/utils';
 import { toast } from 'sonner';
 import { Workspace } from '../types';
-import { db } from '../firebase';
-import { collection, addDoc, getDocs, query, where, updateDoc, doc, increment, writeBatch } from 'firebase/firestore';
 import { Transaction, Account } from '../types';
 
 interface ImportToolProps {

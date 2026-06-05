@@ -1,6 +1,4 @@
 import { useEffect, useState } from 'react';
-import { db, handleFirestoreError } from '../firebase';
-import { collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc, writeBatch, getDocs, query, where } from 'firebase/firestore';
 import { EXCHANGE_RATES } from '../constants';
 import { Workspace, Account, AllocationRule, Currency, PaymentMethod, Contact } from '../types';
 import { cn } from '@/lib/utils';

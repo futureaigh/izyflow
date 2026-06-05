@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
-import { db } from '../firebase';
-import { doc, onSnapshot, collection, query, orderBy, limit, getDocs, updateDoc, where } from 'firebase/firestore';
 import { CMSConfig, UserProfile, FAQItem, ServiceItem, UserRole, Visit } from '../types';
 import { motion } from 'motion/react';
 import { Settings, Image as ImageIcon, Type, Layout, Save, Loader2, ShieldCheck, ChevronRight, Globe, Palette, FileText, Plus, Trash2, HelpCircle, Briefcase, Upload, BarChart3, Users, Home, MessageCircle, AlertTriangle, Clock } from 'lucide-react';

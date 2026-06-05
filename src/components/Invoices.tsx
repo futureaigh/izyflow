@@ -1,6 +1,4 @@
 import { useEffect, useState, useMemo } from 'react';
-import { db, handleFirestoreError } from '../firebase';
-import { collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc, writeBatch, query, orderBy, getDocs, increment, where } from 'firebase/firestore';
 import { Workspace, Invoice, InvoiceItem, Account, AllocationRule, Transaction, InvoiceStatus, TransactionType } from '../types';
 import { cn, parseLocalDate } from '../lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';

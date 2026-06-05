@@ -19,3 +19,4 @@ izyflow-beta/
 performance-*.json
 *.heapsnapshot
 *-screenshot.png
+*.js
