@@ -11,6 +11,7 @@ export interface UserProfile {
   displayName: string;
   photoURL?: string;
   createdAt: string;
+  updatedAt?: string;
   lastSeen?: string;
   role?: UserRole;
   subscription?: {
