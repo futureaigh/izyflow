@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
+import { Type } from "@google/genai";
 import { motion, AnimatePresence } from 'motion/react';
 import { api } from '../lib/api';
 import { X, Send, Bot, User, Loader2, MessageSquare, Sparkles, Check, AlertCircle, PieChart as ChartIcon, TrendingUp, TrendingDown, DollarSign, Download } from 'lucide-react';
@@ -140,7 +140,6 @@ export function IzyAssistant({ workspace, user, transactions, invoices, accounts
     setIsLoading(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
       
       // Log query for analytics (optional placeholder)
       try {
@@ -187,14 +186,13 @@ export function IzyAssistant({ workspace, user, transactions, invoices, accounts
         parts: [{ text: m.content }] 
       }));
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview", // Switched back to Flash for much better connectivity in sandboxed regions
-        contents: [
+      const response = await api.chat(
+        [
           { role: 'user', parts: [{ text: context }] },
           ...history,
           { role: 'user', parts: [{ text: userMessage }] }
         ],
-        config: {
+        {
           temperature: 0, // Deterministic for retrieval
           tools: [{
             functionDeclarations: [
@@ -382,8 +380,9 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
               }
             ]
           }]
-        }
-      });
+        },
+        "gemini-2.5-flash"
+      );
 
       const functionCalls = response.functionCalls;
       if (functionCalls && functionCalls.length > 0) {

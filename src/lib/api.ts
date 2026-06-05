@@ -93,4 +93,10 @@ export const api = {
   getPublicCatalog: (wsId: string) => fetchAPI(`/api/public/catalog/${wsId}`),
   getPublicWorkspace: (id: string) => fetchAPI(`/api/public/workspace/${id}`),
   publicCheckout: (wsId: string, data: any) => fetchAPI(`/api/public/catalog/${wsId}/checkout`, { method: "POST", body: JSON.stringify(data) }),
+
+  // AI Chat
+  chat: (contents: any[], config?: any, model?: string) => fetchAPI("/api/chat", {
+    method: "POST",
+    body: JSON.stringify({ contents, config, model })
+  }),
 };

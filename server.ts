@@ -1,5 +1,6 @@
 import "./src/loadEnv";
 import express from "express";
+import { GoogleGenAI } from "@google/genai";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -299,6 +300,29 @@ async function startServer() {
     const { reference } = req.query;
     // Redirect back to the app with the reference
     res.redirect(`/?payment_reference=${reference}`);
+  });
+
+  // AI Chatbot Proxy Endpoint
+  app.post("/api/chat", requireAuthMiddleware(), async (req: any, res) => {
+    const { contents, config, model = "gemini-2.5-flash" } = req.body;
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (!apiKey) {
+      return res.status(500).json({ error: "GEMINI_API_KEY is not configured" });
+    }
+
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model,
+        contents,
+        config,
+      });
+      res.json(response);
+    } catch (error: any) {
+      console.error("Gemini API error:", error);
+      res.status(500).json({ error: error.message || "Failed to generate AI response" });
+    }
   });
 
   // ==========================================
