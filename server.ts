@@ -53,7 +53,7 @@ async function startServer() {
   }));
 
   // ============================================
-  // CLERK WEBHOOK ENDPOINT (User Sync)
+  // CLERK WEBHOOK ENDPOINT (Complete Event Handling)
   // ============================================
   // NOTE: Use express.raw() for webhook route - verification requires raw body bytes
   app.post("/api/webhooks/clerk", express.raw({ type: 'application/json' }), async (req: any, res: any) => {
@@ -65,6 +65,7 @@ async function startServer() {
       
       console.log(`Received Clerk webhook: ${evt.type}`);
       
+      // ==================== USER EVENTS ====================
       if (evt.type === "user.created") {
         const { id, email_addresses, first_name, last_name } = evt.data;
         const email = email_addresses?.[0]?.email_address || "";
@@ -72,7 +73,6 @@ async function startServer() {
           ? `${first_name || ""} ${last_name || ""}`.trim()
           : email.split("@")[0] || "User";
         
-        // Check if user already exists
         const [existing] = await db.select().from(users).where(eq(users.uid, id));
         if (!existing) {
           await db.insert(users).values({
@@ -84,9 +84,9 @@ async function startServer() {
             subscription: JSON.stringify({ plan: "Free", status: "Active" }),
             preferences: JSON.stringify({ timeFormat: "12h", dateFormat: "yyyy-MM-dd" })
           });
-          console.log(`Created user in Turso: ${id} (${email})`);
+          console.log(`✅ Created user in Turso: ${id} (${email})`);
         } else {
-          console.log(`User already exists in Turso: ${id}`);
+          console.log(`ℹ️  User already exists in Turso: ${id}`);
         }
       }
       
@@ -97,7 +97,6 @@ async function startServer() {
           ? `${first_name || ""} ${last_name || ""}`.trim()
           : email.split("@")[0] || "User";
         
-        // Update existing user
         const [existing] = await db.select().from(users).where(eq(users.uid, id));
         if (existing) {
           await db.update(users)
@@ -108,63 +107,201 @@ async function startServer() {
               lastSeen: new Date().toISOString()
             })
             .where(eq(users.uid, id));
-          console.log(`Updated user in Turso: ${id} (${email})`);
+          console.log(`✅ Updated user in Turso: ${id} (${email})`);
         }
       }
       
       if (evt.type === "user.deleted") {
         const { id } = evt.data;
-        
-        // Delete user from Turso
         await db.delete(users).where(eq(users.uid, id));
-        console.log(`Deleted user from Turso: ${id}`);
+        console.log(`✅ Deleted user from Turso: ${id}`);
       }
       
-      // Session events - track user activity
+      // ==================== SESSION EVENTS ====================
       if (evt.type === "session.created") {
         const { user_id } = evt.data;
-        
-        // Update last_seen timestamp
         await db.update(users)
           .set({ lastSeen: new Date().toISOString() })
           .where(eq(users.uid, user_id));
-        console.log(`User logged in: ${user_id}`);
+        console.log(`✅ User logged in: ${user_id}`);
       }
       
       if (evt.type === "session.ended" || evt.type === "session.revoked") {
         const { user_id } = evt.data;
-        
-        // Update last_seen timestamp on logout
         await db.update(users)
           .set({ lastSeen: new Date().toISOString() })
           .where(eq(users.uid, user_id));
-        console.log(`User logged out: ${user_id}`);
+        console.log(`✅ User logged out: ${user_id}`);
       }
       
-      // Session events - track user activity
-      if (evt.type === "session.created") {
-        const { user_id } = evt.data;
-        
-        // Update last_seen timestamp
-        await db.update(users)
-          .set({ lastSeen: new Date().toISOString() })
-          .where(eq(users.uid, user_id));
-        console.log(`User logged in: ${user_id}`);
+      // ==================== ORGANIZATION EVENTS ====================
+      if (evt.type === "organization.created") {
+        const { id, name, slug, created_by } = evt.data;
+        const [existing] = await db.select().from(workspaces).where(eq(workspaces.id, id));
+        if (!existing) {
+          await db.insert(workspaces).values({
+            id,
+            name: name || slug || "Business Workspace",
+            type: "Business",
+            ownerId: created_by,
+            currency: "USD",
+            incomeCategories: JSON.stringify(["Sales", "Services", "Investments"]),
+            expenseCategories: JSON.stringify(["Operations", "Marketing", "Payroll"]),
+            investmentCategories: JSON.stringify(["Stocks", "Real Estate", "Business"]),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          });
+          console.log(`✅ Created workspace for org: ${id} (${name})`);
+        } else {
+          console.log(`ℹ️  Workspace already exists for org: ${id}`);
+        }
       }
       
-      if (evt.type === "session.ended" || evt.type === "session.revoked") {
+      if (evt.type === "organization.updated") {
+        const { id, name, slug, logo_url, public_metadata } = evt.data;
+        const [existing] = await db.select().from(workspaces).where(eq(workspaces.id, id));
+        if (existing) {
+          await db.update(workspaces)
+            .set({
+              name: name || existing.name,
+              logoUrl: logo_url,
+              updatedAt: new Date().toISOString()
+            })
+            .where(eq(workspaces.id, id));
+          console.log(`✅ Updated workspace for org: ${id}`);
+        }
+      }
+      
+      if (evt.type === "organization.deleted") {
+        const { id } = evt.data;
+        // Cascade delete related records
+        await db.delete(transactions).where(eq(transactions.workspaceId, id));
+        await db.delete(invoices).where(eq(invoices.workspaceId, id));
+        await db.delete(accounts).where(eq(accounts.workspaceId, id));
+        await db.delete(allocationRules).where(eq(allocationRules.workspaceId, id));
+        await db.delete(catalogItems).where(eq(catalogItems.workspaceId, id));
+        await db.delete(pricingCalculations).where(eq(pricingCalculations.workspaceId, id));
+        await db.delete(contacts).where(eq(contacts.workspaceId, id));
+        await db.delete(staff).where(eq(staff.workspaceId, id));
+        await db.delete(staffReceipts).where(eq(staffReceipts.workspaceId, id));
+        await db.delete(workspaces).where(eq(workspaces.id, id));
+        console.log(`✅ Deleted workspace and all data for org: ${id}`);
+      }
+      
+      // ==================== ORGANIZATION MEMBERSHIP EVENTS ====================
+      if (evt.type === "organizationMembership.created") {
+        const { organization, public_user_data, role } = evt.data;
+        const orgId = organization.id;
+        const userId = public_user_data.user_id;
+        console.log(`✅ User ${userId} joined organization ${orgId} as ${role}`);
+        // Future: Add team member permissions/roles tracking
+      }
+      
+      if (evt.type === "organizationMembership.updated") {
+        const { organization, public_user_data, role } = evt.data;
+        const orgId = organization.id;
+        const userId = public_user_data.user_id;
+        console.log(`✅ User ${userId} role updated to ${role} in organization ${orgId}`);
+        // Future: Update team member permissions/roles
+      }
+      
+      if (evt.type === "organizationMembership.deleted") {
+        const { organization, public_user_data } = evt.data;
+        const orgId = organization.id;
+        const userId = public_user_data.user_id;
+        console.log(`✅ User ${userId} removed from organization ${orgId}`);
+        // Future: Remove team member access/permissions
+      }
+      
+      // ==================== SUBSCRIPTION EVENTS ====================
+      if (evt.type === "subscription.created") {
+        const { user_id, status, plan_id } = evt.data;
+        const [existing] = await db.select().from(users).where(eq(users.uid, user_id));
+        if (existing) {
+          const currentSubscription = safeParse(existing.subscription) || { plan: "Free", status: "Active" };
+          await db.update(users)
+            .set({
+              subscription: JSON.stringify({
+                ...currentSubscription,
+                plan: plan_id || "Pro",
+                status: status || "Active"
+              })
+            })
+            .where(eq(users.uid, user_id));
+          console.log(`✅ Subscription created for user ${user_id}: ${plan_id}`);
+        }
+      }
+      
+      if (evt.type === "subscription.updated") {
+        const { user_id, status, plan_id } = evt.data;
+        const [existing] = await db.select().from(users).where(eq(users.uid, user_id));
+        if (existing) {
+          const currentSubscription = safeParse(existing.subscription) || { plan: "Free", status: "Active" };
+          await db.update(users)
+            .set({
+              subscription: JSON.stringify({
+                ...currentSubscription,
+                plan: plan_id || currentSubscription.plan,
+                status: status || currentSubscription.status
+              })
+            })
+            .where(eq(users.uid, user_id));
+          console.log(`✅ Subscription updated for user ${user_id}: ${plan_id}`);
+        }
+      }
+      
+      if (evt.type === "subscription.active") {
+        const { user_id, plan_id } = evt.data;
+        const [existing] = await db.select().from(users).where(eq(users.uid, user_id));
+        if (existing) {
+          const currentSubscription = safeParse(existing.subscription) || { plan: "Free", status: "Active" };
+          await db.update(users)
+            .set({
+              subscription: JSON.stringify({
+                ...currentSubscription,
+                plan: plan_id || currentSubscription.plan,
+                status: "Active"
+              })
+            })
+            .where(eq(users.uid, user_id));
+          console.log(`✅ Subscription activated for user ${user_id}: ${plan_id}`);
+        }
+      }
+      
+      if (evt.type === "subscription.pastDue") {
         const { user_id } = evt.data;
-        
-        // Update last_seen timestamp on logout
-        await db.update(users)
-          .set({ lastSeen: new Date().toISOString() })
-          .where(eq(users.uid, user_id));
-        console.log(`User logged out: ${user_id}`);
+        const [existing] = await db.select().from(users).where(eq(users.uid, user_id));
+        if (existing) {
+          const currentSubscription = safeParse(existing.subscription) || { plan: "Free", status: "Active" };
+          await db.update(users)
+            .set({
+              subscription: JSON.stringify({
+                ...currentSubscription,
+                status: "PastDue"
+              })
+            })
+            .where(eq(users.uid, user_id));
+          console.log(`⚠️  Subscription past due for user ${user_id}`);
+        }
+      }
+      
+      // ==================== EMAIL EVENTS ====================
+      if (evt.type === "email.created") {
+        const { user_id, email_address, verification } = evt.data;
+        console.log(`✅ Email created for user ${user_id}: ${email_address} (verified: ${verification?.status})`);
+        // Future: Track email verification status for analytics
+      }
+      
+      // ==================== SMS EVENTS ====================
+      if (evt.type === "sms.created") {
+        const { user_id, phone_number, verification } = evt.data;
+        console.log(`✅ SMS created for user ${user_id}: ${phone_number} (verified: ${verification?.status})`);
+        // Future: Track phone verification status for analytics
       }
       
       res.send('Webhook received');
     } catch (error) {
-      console.error('Error verifying webhook:', error);
+      console.error('❌ Webhook error:', error);
       res.status(400).send('Error verifying webhook');
     }
   });
