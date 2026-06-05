@@ -1,8 +1,7 @@
 [build]
-builder = "NIXPACKS"
 
 [deploy]
-startCommand = "node --loader tsx --env-file=.env server.ts"
+startCommand = "tsx server.ts"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
