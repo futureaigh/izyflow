@@ -10,3 +10,12 @@ coverage/
 .env*
 !.env.example
 izyflow-beta/
+# Audit results files
+*.json
+*.html
+*.csv
+/audit-results/
+*.png
+performance-*.json
+*.heapsnapshot
+*-screenshot.png
