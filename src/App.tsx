@@ -231,21 +231,28 @@ export default function App({ auth }: AppProps) {
           setLoading(true);
           setWorkspacesLoading(true);
           
-          // Use Clerk's user data directly
-          const profile: UserProfile = {
-            uid: auth.userId!,
-            email: auth.email!,
-            displayName: auth.displayName || auth.email?.split('@')[0] || 'User',
-            photoURL: auth.photoURL || null,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          };
-          setUser(profile);
-          localStorage.setItem(`user_profile_${profile.uid}`, JSON.stringify(profile));
-
           // Set active authorization token for API calls
           const token = await auth.getToken();
           setAuthToken(token);
+
+          // Fetch user profile from backend database
+          let profile: UserProfile;
+          try {
+            profile = await api.getMe();
+          } catch (meErr) {
+            console.error("Failed to fetch user profile from backend:", meErr);
+            // Fallback to Clerk data if backend fails
+            profile = {
+              uid: auth.userId!,
+              email: auth.email!,
+              displayName: auth.displayName || auth.email?.split('@')[0] || 'User',
+              photoURL: auth.photoURL || null,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            };
+          }
+          setUser(profile);
+          localStorage.setItem(`user_profile_${profile.uid}`, JSON.stringify(profile));
 
           // Load workspaces from backend database
           let ws: Workspace[] = [];
