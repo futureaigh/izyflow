@@ -839,9 +839,11 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
                       ? "bg-blue-600 text-white rounded-tr-none" 
                       : "bg-muted text-foreground rounded-tl-none"
                   )}>
-                    <ReactMarkdown className="prose prose-sm dark:prose-invert max-w-none text-inherit leading-relaxed break-words font-medium">
-                      {m.content}
-                    </ReactMarkdown>
+                    <div className="prose prose-sm dark:prose-invert max-w-none text-inherit leading-relaxed break-words font-medium">
+                      <ReactMarkdown>
+                        {m.content}
+                      </ReactMarkdown>
+                    </div>
                   </div>
 
                   {m.pendingTransaction && (
