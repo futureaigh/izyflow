@@ -5,7 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import cors from "cors";
 import { clerkMiddleware, getAuth, clerkClient } from "@clerk/express";
-import { verifyWebhook } from "@clerk/express/webhooks.js";
+import { verifyWebhook } from "@clerk/express/webhooks";
 // Drizzle and DB imports
 import { db } from "./src/db/index";
 import { 
@@ -59,7 +59,9 @@ async function startServer() {
   app.post("/api/webhooks/clerk", express.raw({ type: 'application/json' }), async (req: any, res: any) => {
     try {
       // Verify webhook signature
-      const evt = await verifyWebhook(req);
+      const evt = await verifyWebhook(req, {
+        signingSecret: process.env.CLERK_WEBHOOK_SIGNING_SECRET
+      });
       
       console.log(`Received Clerk webhook: ${evt.type}`);
       
@@ -116,6 +118,27 @@ async function startServer() {
         // Delete user from Turso
         await db.delete(users).where(eq(users.uid, id));
         console.log(`Deleted user from Turso: ${id}`);
+      }
+      
+      // Session events - track user activity
+      if (evt.type === "session.created") {
+        const { user_id } = evt.data;
+        
+        // Update last_seen timestamp
+        await db.update(users)
+          .set({ lastSeen: new Date().toISOString() })
+          .where(eq(users.uid, user_id));
+        console.log(`User logged in: ${user_id}`);
+      }
+      
+      if (evt.type === "session.ended" || evt.type === "session.revoked") {
+        const { user_id } = evt.data;
+        
+        // Update last_seen timestamp on logout
+        await db.update(users)
+          .set({ lastSeen: new Date().toISOString() })
+          .where(eq(users.uid, user_id));
+        console.log(`User logged out: ${user_id}`);
       }
       
       res.send('Webhook received');
