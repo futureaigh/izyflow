@@ -243,9 +243,21 @@ export default function App({ auth }: AppProps) {
           setUser(profile);
           localStorage.setItem(`user_profile_${profile.uid}`, JSON.stringify(profile));
 
-          // Load workspaces from local storage (frontend-only approach)
-          const storedWorkspaces = localStorage.getItem(`workspaces_${profile.uid}`);
-          const ws = storedWorkspaces ? JSON.parse(storedWorkspaces) : [];
+          // Set active authorization token for API calls
+          const token = await auth.getToken();
+          setAuthToken(token);
+
+          // Load workspaces from backend database
+          let ws: Workspace[] = [];
+          try {
+            ws = await api.getWorkspaces();
+            localStorage.setItem(`workspaces_${profile.uid}`, JSON.stringify(ws));
+          } catch (apiErr) {
+            console.error("Failed to fetch workspaces from backend, fallback to local storage:", apiErr);
+            const storedWorkspaces = localStorage.getItem(`workspaces_${profile.uid}`);
+            ws = storedWorkspaces ? JSON.parse(storedWorkspaces) : [];
+          }
+
           setWorkspaces(ws);
           setActiveWorkspace(current => current ? (ws.find(w => w.id === current.id) || current) : (ws.length > 0 ? ws[0] : null));
           
