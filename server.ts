@@ -88,6 +88,36 @@ async function startServer() {
         }
       }
       
+      if (evt.type === "user.updated") {
+        const { id, email_addresses, first_name, last_name, image_url } = evt.data;
+        const email = email_addresses?.[0]?.email_address || "";
+        const displayName = first_name || last_name 
+          ? `${first_name || ""} ${last_name || ""}`.trim()
+          : email.split("@")[0] || "User";
+        
+        // Update existing user
+        const [existing] = await db.select().from(users).where(eq(users.uid, id));
+        if (existing) {
+          await db.update(users)
+            .set({ 
+              email,
+              displayName,
+              photoURL: image_url,
+              lastSeen: new Date().toISOString()
+            })
+            .where(eq(users.uid, id));
+          console.log(`Updated user in Turso: ${id} (${email})`);
+        }
+      }
+      
+      if (evt.type === "user.deleted") {
+        const { id } = evt.data;
+        
+        // Delete user from Turso
+        await db.delete(users).where(eq(users.uid, id));
+        console.log(`Deleted user from Turso: ${id}`);
+      }
+      
       res.send('Webhook received');
     } catch (error) {
       console.error('Error verifying webhook:', error);
