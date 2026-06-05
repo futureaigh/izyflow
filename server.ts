@@ -49,6 +49,47 @@ async function startServer() {
   // Register Clerk Auth Middleware
   app.use(clerkMiddleware());
 
+  // ============================================
+  // CLERK WEBHOOK ENDPOINT (User Sync)
+  // ============================================
+  app.post("/api/webhooks/clerk", async (req, res) => {
+    try {
+      const { data, type } = req.body;
+      
+      console.log(`Received Clerk webhook: ${type}`);
+      
+      if (type === "user.created") {
+        const { id, email_addresses, first_name, last_name } = data;
+        const email = email_addresses?.[0]?.email_address || "";
+        const displayName = first_name || last_name 
+          ? `${first_name || ""} ${last_name || ""}`.trim()
+          : email.split("@")[0] || "User";
+        
+        // Check if user already exists
+        const [existing] = await db.select().from(users).where(eq(users.uid, id));
+        if (!existing) {
+          await db.insert(users).values({
+            uid: id,
+            email,
+            displayName,
+            createdAt: new Date().toISOString(),
+            role: "User",
+            subscription: JSON.stringify({ plan: "Free", status: "Active" }),
+            preferences: JSON.stringify({ timeFormat: "12h", dateFormat: "yyyy-MM-dd" })
+          });
+          console.log(`Created user in Turso: ${id} (${email})`);
+        } else {
+          console.log(`User already exists in Turso: ${id}`);
+        }
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Webhook error:", error);
+      res.status(500).json({ error: "Webhook processing failed" });
+    }
+  });
+
   // Paystack Integration Endpoint
   app.post("/api/paystack/initialize", async (req, res) => {
     const { email, amount, plan } = req.body;
