@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { EXCHANGE_RATES } from '../constants';
 import { Workspace, Account, AllocationRule, Currency, PaymentMethod, Contact } from '../types';
-import { cn } from '@/lib/utils';
+import { cn } from '../lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -12,6 +12,7 @@ import { Plus, Trash2, Save, Percent, Wallet, Info, Settings as SettingsIcon, Cr
 import { toast } from 'sonner';
 import { UserProfile } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
+import { api } from '../lib/api';
 
 interface SettingsProps {
   workspace: Workspace | null;
@@ -95,39 +96,53 @@ export function Settings({ workspace, user }: SettingsProps) {
     }
   }, [workspace]);
 
-  useEffect(() => {
+  const fetchAccounts = async () => {
     if (!workspace) return;
+    try {
+      const data = await api.getAccounts(workspace.id);
+      setAccounts(data);
+    } catch (err) {
+      console.error("Failed to fetch accounts:", err);
+    }
+  };
 
-    const unsubscribeA = onSnapshot(collection(db, `workspaces/${workspace.id}/accounts`), (snapshot) => {
-      setAccounts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Account)));
-    }, (error) => handleFirestoreError(error, 'list', 'accounts'));
+  const fetchRules = async () => {
+    if (!workspace) return;
+    try {
+      const data = await api.getAllocationRules(workspace.id);
+      setRules(data);
+    } catch (err) {
+      console.error("Failed to fetch rules:", err);
+    }
+  };
 
-    const unsubscribeR = onSnapshot(collection(db, `workspaces/${workspace.id}/allocationRules`), (snapshot) => {
-      setRules(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AllocationRule)));
-    }, (error) => handleFirestoreError(error, 'list', 'allocationRules'));
+  const fetchContacts = async () => {
+    if (!workspace) return;
+    try {
+      const data = await api.getContacts(workspace.id);
+      setContacts(data);
+    } catch (err) {
+      console.error("Failed to fetch contacts:", err);
+    }
+  };
 
-    const unsubscribeC = onSnapshot(collection(db, `workspaces/${workspace.id}/contacts`), (snapshot) => {
-      setContacts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Contact)));
-    }, (error) => handleFirestoreError(error, 'list', 'contacts'));
-
-    return () => {
-      unsubscribeA();
-      unsubscribeR();
-      unsubscribeC();
-    };
+  useEffect(() => {
+    fetchAccounts();
+    fetchRules();
+    fetchContacts();
   }, [workspace]);
 
   const addAccount = async () => {
     if (!workspace || !newAccountName) return;
     try {
-      await addDoc(collection(db, `workspaces/${workspace.id}/accounts`), {
-        workspaceId: workspace.id,
+      await api.createAccount(workspace.id, {
         name: newAccountName,
         balance: 0,
         currency: workspace.currency
       });
       setNewAccountName('');
       toast.success('Account created');
+      fetchAccounts();
     } catch (error) {
       toast.error('Failed to create account');
     }
@@ -136,8 +151,7 @@ export function Settings({ workspace, user }: SettingsProps) {
   const addRule = async () => {
     if (!workspace || !newRuleName || !newRulePercentage || !newRuleAccountId) return;
     try {
-      await addDoc(collection(db, `workspaces/${workspace.id}/allocationRules`), {
-        workspaceId: workspace.id,
+      await api.createAllocationRule(workspace.id, {
         name: newRuleName,
         percentage: newRulePercentage,
         targetAccountId: newRuleAccountId
@@ -146,6 +160,7 @@ export function Settings({ workspace, user }: SettingsProps) {
       setNewRulePercentage(0);
       setNewRuleAccountId('');
       toast.success('Allocation rule created');
+      fetchRules();
     } catch (error) {
       toast.error('Failed to create rule');
     }
@@ -154,8 +169,9 @@ export function Settings({ workspace, user }: SettingsProps) {
   const deleteAccount = async (id: string) => {
     if (!workspace) return;
     try {
-      await deleteDoc(doc(db, `workspaces/${workspace.id}/accounts`, id));
+      await api.deleteAccount(workspace.id, id);
       toast.success('Account deleted');
+      fetchAccounts();
     } catch (error) {
       toast.error('Failed to delete account');
     }
@@ -164,8 +180,9 @@ export function Settings({ workspace, user }: SettingsProps) {
   const deleteRule = async (id: string) => {
     if (!workspace) return;
     try {
-      await deleteDoc(doc(db, `workspaces/${workspace.id}/allocationRules`, id));
+      await api.deleteAllocationRule(workspace.id, id);
       toast.success('Rule deleted');
+      fetchRules();
     } catch (error) {
       toast.error('Failed to delete rule');
     }
@@ -179,30 +196,25 @@ export function Settings({ workspace, user }: SettingsProps) {
 
       const confirmConversion = window.confirm(`Do you want to auto-convert all existing account balances from ${oldCurrency} to ${currency}? (Recommended)`);
       
-      const batch = writeBatch(db);
-      batch.update(doc(db, 'workspaces', workspace.id), { currency });
+      await api.updateWorkspace(workspace.id, { currency });
 
       if (confirmConversion) {
         const targetRate = EXCHANGE_RATES[currency] || 1;
         const sourceRate = EXCHANGE_RATES[oldCurrency] || 1;
         const multiplier = targetRate / sourceRate;
 
-        // Convert account balances
-        const accountsSnapshot = await getDocs(collection(db, `workspaces/${workspace.id}/accounts`));
-        accountsSnapshot.docs.forEach(accountDoc => {
-          const currentBalance = accountDoc.data().balance || 0;
-          batch.update(accountDoc.ref, { 
-            balance: currentBalance * multiplier,
-            currency: currency // Update account currency too
+        // Convert account balances in database
+        for (const account of accounts) {
+          await api.updateAccount(workspace.id, account.id, {
+            balance: (account.balance || 0) * multiplier,
+            currency
           });
-        });
-
-        // Note: We don't convert historical transactions/invoices because they are fixed in time.
-        // But we update the workspace base currency which affects how they are viewed.
+        }
       }
 
-      await batch.commit();
       toast.success('Currency updated' + (confirmConversion ? ' and balances converted' : ''));
+      window.dispatchEvent(new CustomEvent('refresh-workspaces'));
+      fetchAccounts();
     } catch (error) {
       toast.error('Failed to update currency');
     }
@@ -232,10 +244,11 @@ export function Settings({ workspace, user }: SettingsProps) {
     };
     console.log('Updating workspace with data:', updateData);
     try {
-      await updateDoc(doc(db, 'workspaces', workspace.id), updateData);
+      await api.updateWorkspace(workspace.id, updateData);
       toast.success('Workspace details updated');
+      window.dispatchEvent(new CustomEvent('refresh-workspaces'));
     } catch (error) {
-      handleFirestoreError(error, 'update', `workspaces/${workspace.id}`);
+      console.error(error);
       toast.error('Failed to update workspace');
     }
   };
@@ -279,14 +292,13 @@ export function Settings({ workspace, user }: SettingsProps) {
         toast.error('Category already exists');
         return;
       }
-      await updateDoc(doc(db, 'workspaces', workspace.id), {
-        incomeCategories: [...currentCategories, newIncomeCategory],
-        updatedAt: new Date().toISOString()
+      await api.updateWorkspace(workspace.id, {
+        incomeCategories: [...currentCategories, newIncomeCategory]
       });
       setNewIncomeCategory('');
       toast.success('Income category added');
+      window.dispatchEvent(new CustomEvent('refresh-workspaces'));
     } catch (error) {
-      handleFirestoreError(error, 'update', `workspaces/${workspace.id}`);
       toast.error('Failed to add category');
     }
   };
@@ -297,33 +309,12 @@ export function Settings({ workspace, user }: SettingsProps) {
       const currentCategories = incomeCategories;
       const updatedCategories = currentCategories.filter(c => c !== category);
       
-      const batch = writeBatch(db);
-      
-      // Update workspace
-      batch.update(doc(db, 'workspaces', workspace.id), {
-        incomeCategories: updatedCategories,
-        updatedAt: new Date().toISOString()
+      await api.updateWorkspace(workspace.id, {
+        incomeCategories: updatedCategories
       });
-
-      // Update transactions that used this category to a fallback
-      const fallbackCategory = updatedCategories.includes('Other') ? 'Other' : (updatedCategories[0] || 'Other');
-      const q = query(
-        collection(db, 'workspaces', workspace.id, 'transactions'),
-        where('type', '==', 'Income'),
-        where('category', '==', category)
-      );
-      const snapshot = await getDocs(q);
-      snapshot.docs.forEach((transactionDoc) => {
-        batch.update(transactionDoc.ref, {
-          category: fallbackCategory,
-          updatedAt: new Date().toISOString()
-        });
-      });
-
-      await batch.commit();
-      toast.success('Income category removed and transactions updated');
+      toast.success('Income category removed');
+      window.dispatchEvent(new CustomEvent('refresh-workspaces'));
     } catch (error) {
-      handleFirestoreError(error, 'update', `workspaces/${workspace.id}`);
       toast.error('Failed to remove category');
     }
   };
@@ -336,14 +327,13 @@ export function Settings({ workspace, user }: SettingsProps) {
         toast.error('Category already exists');
         return;
       }
-      await updateDoc(doc(db, 'workspaces', workspace.id), {
-        expenseCategories: [...currentCategories, newExpenseCategory],
-        updatedAt: new Date().toISOString()
+      await api.updateWorkspace(workspace.id, {
+        expenseCategories: [...currentCategories, newExpenseCategory]
       });
       setNewExpenseCategory('');
       toast.success('Expense category added');
+      window.dispatchEvent(new CustomEvent('refresh-workspaces'));
     } catch (error) {
-      handleFirestoreError(error, 'update', `workspaces/${workspace.id}`);
       toast.error('Failed to add category');
     }
   };
@@ -354,33 +344,12 @@ export function Settings({ workspace, user }: SettingsProps) {
       const currentCategories = expenseCategories;
       const updatedCategories = currentCategories.filter(c => c !== category);
       
-      const batch = writeBatch(db);
-      
-      // Update workspace
-      batch.update(doc(db, 'workspaces', workspace.id), {
-        expenseCategories: updatedCategories,
-        updatedAt: new Date().toISOString()
+      await api.updateWorkspace(workspace.id, {
+        expenseCategories: updatedCategories
       });
-
-      // Update transactions that used this category to a fallback
-      const fallbackCategory = updatedCategories.includes('Other') ? 'Other' : (updatedCategories[0] || 'Other');
-      const q = query(
-        collection(db, 'workspaces', workspace.id, 'transactions'),
-        where('type', '==', 'Expense'),
-        where('category', '==', category)
-      );
-      const snapshot = await getDocs(q);
-      snapshot.docs.forEach((transactionDoc) => {
-        batch.update(transactionDoc.ref, {
-          category: fallbackCategory,
-          updatedAt: new Date().toISOString()
-        });
-      });
-
-      await batch.commit();
-      toast.success('Expense category removed and transactions updated');
+      toast.success('Expense category removed');
+      window.dispatchEvent(new CustomEvent('refresh-workspaces'));
     } catch (error) {
-      handleFirestoreError(error, 'update', `workspaces/${workspace.id}`);
       toast.error('Failed to remove category');
     }
   };
@@ -388,20 +357,18 @@ export function Settings({ workspace, user }: SettingsProps) {
   const addInvestmentCategory = async () => {
     if (!workspace || !newInvestmentCategory) return;
     try {
-      // Use the latest categories from the workspace prop
       const currentCategories = workspace.investmentCategories || ['Stocks', 'Crypto', 'Real Estate', 'Bonds', 'Mutual Funds', 'Other'];
       if (currentCategories.includes(newInvestmentCategory)) {
         toast.error('Category already exists');
         return;
       }
-      await updateDoc(doc(db, 'workspaces', workspace.id), {
-        investmentCategories: [...currentCategories, newInvestmentCategory],
-        updatedAt: new Date().toISOString()
+      await api.updateWorkspace(workspace.id, {
+        investmentCategories: [...currentCategories, newInvestmentCategory]
       });
       setNewInvestmentCategory('');
       toast.success('Investment category added');
+      window.dispatchEvent(new CustomEvent('refresh-workspaces'));
     } catch (error) {
-      handleFirestoreError(error, 'update', `workspaces/${workspace.id}`);
       toast.error('Failed to add category');
     }
   };
@@ -412,33 +379,12 @@ export function Settings({ workspace, user }: SettingsProps) {
       const currentCategories = workspace.investmentCategories || ['Stocks', 'Crypto', 'Real Estate', 'Bonds', 'Mutual Funds', 'Other'];
       const updatedCategories = currentCategories.filter(c => c !== category);
       
-      const batch = writeBatch(db);
-      
-      // Update workspace
-      batch.update(doc(db, 'workspaces', workspace.id), {
-        investmentCategories: updatedCategories,
-        updatedAt: new Date().toISOString()
+      await api.updateWorkspace(workspace.id, {
+        investmentCategories: updatedCategories
       });
-
-      // Update transactions that used this category to a fallback
-      const fallbackCategory = updatedCategories.includes('Other') ? 'Other' : (updatedCategories[0] || 'Other');
-      const q = query(
-        collection(db, 'workspaces', workspace.id, 'transactions'),
-        where('type', '==', 'Investment'),
-        where('category', '==', category)
-      );
-      const snapshot = await getDocs(q);
-      snapshot.docs.forEach((transactionDoc) => {
-        batch.update(transactionDoc.ref, {
-          category: fallbackCategory,
-          updatedAt: new Date().toISOString()
-        });
-      });
-
-      await batch.commit();
-      toast.success('Investment category removed and transactions updated');
+      toast.success('Investment category removed');
+      window.dispatchEvent(new CustomEvent('refresh-workspaces'));
     } catch (error) {
-      handleFirestoreError(error, 'update', `workspaces/${workspace.id}`);
       toast.error('Failed to remove category');
     }
   };
@@ -510,38 +456,17 @@ export function Settings({ workspace, user }: SettingsProps) {
       
       const updatedCategories = currentCategories.map(c => c === oldCategory ? editCategoryValue : c);
       
-      const batch = writeBatch(db);
-      
-      // Update workspace
-      batch.update(doc(db, 'workspaces', workspace.id), {
-        [type === 'income' ? 'incomeCategories' : type === 'expense' ? 'expenseCategories' : 'investmentCategories']: updatedCategories,
-        updatedAt: new Date().toISOString()
+      await api.updateWorkspace(workspace.id, {
+        [type === 'income' ? 'incomeCategories' : type === 'expense' ? 'expenseCategories' : 'investmentCategories']: updatedCategories
       });
-
-      // Update transactions
-      const transactionType = type === 'income' ? 'Income' : type === 'expense' ? 'Expense' : 'Investment';
-      const q = query(
-        collection(db, 'workspaces', workspace.id, 'transactions'),
-        where('type', '==', transactionType),
-        where('category', '==', oldCategory)
-      );
-      const snapshot = await getDocs(q);
-      snapshot.docs.forEach((transactionDoc) => {
-        batch.update(transactionDoc.ref, {
-          category: editCategoryValue,
-          updatedAt: new Date().toISOString()
-        });
-      });
-
-      await batch.commit();
       
       setEditingIncomeCategory(null);
       setEditingExpenseCategory(null);
       setEditingInvestmentCategory(null);
       setEditCategoryValue('');
-      toast.success('Category renamed and transactions updated');
+      toast.success('Category renamed');
+      window.dispatchEvent(new CustomEvent('refresh-workspaces'));
     } catch (error) {
-      handleFirestoreError(error, 'update', `workspaces/${workspace.id}`);
       toast.error('Failed to rename category');
     }
   };
@@ -551,7 +476,6 @@ export function Settings({ workspace, user }: SettingsProps) {
     try {
       const currentPrefs = user.preferences || { timeFormat: '12h', dateFormat: 'MMM d, yyyy' };
       
-      // Deep merge for transactionFields if it's being updated
       let mergedPrefs = { ...currentPrefs, ...newPrefs };
       if (newPrefs.transactionFields && currentPrefs.transactionFields) {
         mergedPrefs.transactionFields = {
@@ -560,7 +484,7 @@ export function Settings({ workspace, user }: SettingsProps) {
         };
       }
 
-      await updateDoc(doc(db, 'users', user.uid), {
+      await api.updateProfile({
         preferences: mergedPrefs
       });
       toast.success('Preferences updated');
@@ -572,8 +496,7 @@ export function Settings({ workspace, user }: SettingsProps) {
   const addContact = async () => {
     if (!workspace || !newContactName) return;
     try {
-      await addDoc(collection(db, `workspaces/${workspace.id}/contacts`), {
-        workspaceId: workspace.id,
+      await api.createContact(workspace.id, {
         name: newContactName,
         email: newContactEmail,
         phone: newContactPhone,
@@ -584,6 +507,7 @@ export function Settings({ workspace, user }: SettingsProps) {
       setNewContactEmail('');
       setNewContactPhone('');
       toast.success('Contact saved');
+      fetchContacts();
     } catch (error) {
       toast.error('Failed to save contact');
     }
@@ -592,8 +516,9 @@ export function Settings({ workspace, user }: SettingsProps) {
   const deleteContact = async (id: string) => {
     if (!workspace) return;
     try {
-      await deleteDoc(doc(db, `workspaces/${workspace.id}/contacts`, id));
+      await api.deleteContact(workspace.id, id);
       toast.success('Contact deleted');
+      fetchContacts();
     } catch (error) {
       toast.error('Failed to delete contact');
     }
@@ -602,7 +527,7 @@ export function Settings({ workspace, user }: SettingsProps) {
   const updateContact = async () => {
     if (!workspace || !editingContactId) return;
     try {
-      await updateDoc(doc(db, `workspaces/${workspace.id}/contacts`, editingContactId), {
+      await api.updateContact(workspace.id, editingContactId, {
         name: editContactName,
         email: editContactEmail,
         phone: editContactPhone,
@@ -610,6 +535,7 @@ export function Settings({ workspace, user }: SettingsProps) {
       });
       setEditingContactId(null);
       toast.success('Contact updated');
+      fetchContacts();
     } catch (error) {
       toast.error('Failed to update contact');
     }

@@ -38,6 +38,7 @@ import {
 } from './ui/dialog';
 import { format, parseISO } from 'date-fns';
 import { generateStaffReceiptPDF } from '../lib/dataEngine';
+import { api } from '../lib/api';
 
 interface ReceiptsProps {
   workspace: Workspace | null;
@@ -88,58 +89,41 @@ export function Receipts({ workspace }: ReceiptsProps) {
   const [receiptNotes, setReceiptNotes] = useState('');
   const [receiptItems, setReceiptItems] = useState<StaffReceiptItem[]>([{ description: '', amount: 0 }]);
 
-  // Subscribe to Staff List
-  useEffect(() => {
+  const fetchStaff = async () => {
     if (!workspace) return;
-
-    setLoadingStaff(true);
-    const q = query(
-      collection(db, `workspaces/${workspace.id}/staff`),
-      orderBy('name', 'asc')
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Staff));
+    try {
+      setLoadingStaff(true);
+      const data = await api.getStaff(workspace.id);
       setStaffList(data);
       localStorage.setItem(`staff_${workspace.id}`, JSON.stringify(data));
+    } catch (error) {
+      console.error(error);
+      const cached = localStorage.getItem(`staff_${workspace.id}`);
+      if (cached) setStaffList(JSON.parse(cached));
+    } finally {
       setLoadingStaff(false);
-    }, (error) => {
-      const result: any = handleFirestoreError(error, 'list', 'staff');
-      if (result?.isQuotaError) {
-        const cached = localStorage.getItem(`staff_${workspace.id}`);
-        if (cached) setStaffList(JSON.parse(cached));
-      }
-      setLoadingStaff(false);
-    });
+    }
+  };
 
-    return () => unsubscribe();
-  }, [workspace]);
-
-  // Subscribe to Staff Receipts List
-  useEffect(() => {
+  const fetchReceipts = async () => {
     if (!workspace) return;
-
-    setLoadingReceipts(true);
-    const q = query(
-      collection(db, `workspaces/${workspace.id}/staffReceipts`),
-      orderBy('date', 'desc')
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StaffReceipt));
+    try {
+      setLoadingReceipts(true);
+      const data = await api.getStaffReceipts(workspace.id);
       setReceiptsList(data);
       localStorage.setItem(`staff_receipts_${workspace.id}`, JSON.stringify(data));
+    } catch (error) {
+      console.error(error);
+      const cached = localStorage.getItem(`staff_receipts_${workspace.id}`);
+      if (cached) setReceiptsList(JSON.parse(cached));
+    } finally {
       setLoadingReceipts(false);
-    }, (error) => {
-      const result: any = handleFirestoreError(error, 'list', 'staffReceipts');
-      if (result?.isQuotaError) {
-        const cached = localStorage.getItem(`staff_receipts_${workspace.id}`);
-        if (cached) setReceiptsList(JSON.parse(cached));
-      }
-      setLoadingReceipts(false);
-    });
+    }
+  };
 
-    return () => unsubscribe();
+  useEffect(() => {
+    fetchStaff();
+    fetchReceipts();
   }, [workspace]);
 
   // Handle Staff Auto-fill when selecting a staff member in receipt creation
@@ -211,15 +195,17 @@ export function Receipts({ workspace }: ReceiptsProps) {
 
     try {
       if (editingStaff) {
-        const docRef = doc(db, `workspaces/${workspace.id}/staff`, editingStaff.id);
-        await updateDoc(docRef, docData);
+        await api.updateStaff(workspace.id, editingStaff.id, docData);
         toast.success(`Updated ${staffName}'s details`);
       } else {
-        const colRef = collection(db, `workspaces/${workspace.id}/staff`);
-        await addDoc(colRef, docData);
+        await api.createStaff(workspace.id, {
+          ...docData,
+          id: Math.random().toString(36).substring(2) + Date.now().toString(36)
+        });
         toast.success(`Added ${staffName} to staff roster`);
       }
       setIsStaffOpen(false);
+      fetchStaff();
     } catch (e: any) {
       console.error('Error saving staff:', e);
       toast.error('Failed to save staff records');
@@ -231,9 +217,9 @@ export function Receipts({ workspace }: ReceiptsProps) {
     if (!window.confirm(`Are you sure you want to remove ${name} from staff list?`)) return;
 
     try {
-      const docRef = doc(db, `workspaces/${workspace.id}/staff`, id);
-      await deleteDoc(docRef);
+      await api.deleteStaff(workspace.id, id);
       toast.success(`Removed ${name} from records`);
+      fetchStaff();
     } catch (e) {
       toast.error('Could not delete staff record');
     }
@@ -333,15 +319,16 @@ export function Receipts({ workspace }: ReceiptsProps) {
 
     try {
       if (editingReceipt) {
-        const docRef = doc(db, `workspaces/${workspace.id}/staffReceipts`, editingReceipt.id);
-        await updateDoc(docRef, docData);
-        toast.success('Successfully modified payment receipt');
+        toast.error('Modifying receipts is not supported by backend schema. Please delete and recreate.');
       } else {
-        const colRef = collection(db, `workspaces/${workspace.id}/staffReceipts`);
-        await addDoc(colRef, docData);
+        await api.createStaffReceipt(workspace.id, {
+          ...docData,
+          id: Math.random().toString(36).substring(2) + Date.now().toString(36)
+        });
         toast.success(`Successfully recorded/issued payment receipt to ${recipientName}`);
       }
       setIsReceiptOpen(false);
+      fetchReceipts();
     } catch (error: any) {
       console.error('Error saving receipt:', error);
       toast.error('Failed to commit payment receipt records');
@@ -353,9 +340,9 @@ export function Receipts({ workspace }: ReceiptsProps) {
     if (!window.confirm(`Are you sure you want to delete payment receipt recorded to ${recipient}?`)) return;
 
     try {
-      const docRef = doc(db, `workspaces/${workspace.id}/staffReceipts`, id);
-      await deleteDoc(docRef);
+      await api.deleteStaffReceipt(workspace.id, id);
       toast.success('Receipt record deleted');
+      fetchReceipts();
     } catch (e) {
       toast.error('Failed to destroy receipt register data');
     }

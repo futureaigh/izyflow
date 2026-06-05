@@ -32,6 +32,7 @@ export const api = {
   // Workspaces
   getWorkspaces: () => fetchAPI("/api/workspaces"),
   createWorkspace: (data: any) => fetchAPI("/api/workspaces", { method: "POST", body: JSON.stringify(data) }),
+  updateWorkspace: (id: string, data: any) => fetchAPI(`/api/workspaces/${id}`, { method: "PUT", body: JSON.stringify(data) }),
 
   // Accounts
   getAccounts: (wsId: string) => fetchAPI(`/api/workspaces/${wsId}/accounts`),
@@ -76,10 +77,13 @@ export const api = {
   // Staff
   getStaff: (wsId: string) => fetchAPI(`/api/workspaces/${wsId}/staff`),
   createStaff: (wsId: string, data: any) => fetchAPI(`/api/workspaces/${wsId}/staff`, { method: "POST", body: JSON.stringify(data) }),
+  updateStaff: (wsId: string, id: string, data: any) => fetchAPI(`/api/workspaces/${wsId}/staff/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteStaff: (wsId: string, id: string) => fetchAPI(`/api/workspaces/${wsId}/staff/${id}`, { method: "DELETE" }),
 
   // Staff Receipts
   getStaffReceipts: (wsId: string) => fetchAPI(`/api/workspaces/${wsId}/staff-receipts`),
   createStaffReceipt: (wsId: string, data: any) => fetchAPI(`/api/workspaces/${wsId}/staff-receipts`, { method: "POST", body: JSON.stringify(data) }),
+  deleteStaffReceipt: (wsId: string, id: string) => fetchAPI(`/api/workspaces/${wsId}/staff-receipts/${id}`, { method: "DELETE" }),
 
   // CMS Config
   getCMSConfig: () => fetchAPI("/api/cms-config"),
@@ -87,4 +91,12 @@ export const api = {
 
   // Public Catalog
   getPublicCatalog: (wsId: string) => fetchAPI(`/api/public/catalog/${wsId}`),
+  getPublicWorkspace: (id: string) => fetchAPI(`/api/public/workspace/${id}`),
+  publicCheckout: (wsId: string, data: any) => fetchAPI(`/api/public/catalog/${wsId}/checkout`, { method: "POST", body: JSON.stringify(data) }),
+
+  // AI Chat
+  chat: (contents: any[], config?: any, model?: string) => fetchAPI("/api/chat", {
+    method: "POST",
+    body: JSON.stringify({ contents, config, model })
+  }),
 };
