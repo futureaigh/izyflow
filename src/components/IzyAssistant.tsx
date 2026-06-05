@@ -142,15 +142,10 @@ export function IzyAssistant({ workspace, user, transactions, invoices, accounts
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
       
-      // Log query for analytics
+      // Log query for analytics (optional placeholder)
       try {
         if (user?.uid) {
-          addDoc(collection(db, 'analytics'), {
-            type: 'izy_query',
-            userId: user.uid,
-            query: userMessage,
-            timestamp: new Date().toISOString()
-          });
+          console.log('izy_query logged for:', user.uid, userMessage);
         }
       } catch (e) {
         console.error('Failed to log izy query:', e);
