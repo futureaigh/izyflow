@@ -2,8 +2,6 @@ import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 import { parseISO } from "date-fns"
 import { Transaction } from "../types"
-import { randomBytes } from 'crypto'
-
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
@@ -24,8 +22,8 @@ export function parseLocalDate(dateStr: string | null | undefined) {
 }
 
 export function generateId() {
-  if (typeof randomBytes === 'function') {
-    return randomBytes(16).toString('hex');
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
   }
   return Math.random().toString(36).substring(2) + Date.now().toString(36);
 }
