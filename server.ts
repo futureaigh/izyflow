@@ -5,6 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import cors from "cors";
 import { clerkMiddleware, getAuth, clerkClient } from "@clerk/express";
+import { verifyWebhook } from "@clerk/express/webhooks.js";
 // Drizzle and DB imports
 import { db } from "./src/db/index";
 import { 
@@ -46,20 +47,24 @@ async function startServer() {
   app.use(cors());
   app.use(express.json());
   
-  // Register Clerk Auth Middleware
-  app.use(clerkMiddleware());
+  // Register Clerk Auth Middleware (excludes webhook route)
+  app.use(clerkMiddleware({
+    excludedRoutes: ['/api/webhooks/clerk']
+  }));
 
   // ============================================
   // CLERK WEBHOOK ENDPOINT (User Sync)
   // ============================================
-  app.post("/api/webhooks/clerk", async (req, res) => {
+  // NOTE: Use express.raw() for webhook route - verification requires raw body bytes
+  app.post("/api/webhooks/clerk", express.raw({ type: 'application/json' }), async (req: any, res: any) => {
     try {
-      const { data, type } = req.body;
+      // Verify webhook signature
+      const evt = await verifyWebhook(req);
       
-      console.log(`Received Clerk webhook: ${type}`);
+      console.log(`Received Clerk webhook: ${evt.type}`);
       
-      if (type === "user.created") {
-        const { id, email_addresses, first_name, last_name } = data;
+      if (evt.type === "user.created") {
+        const { id, email_addresses, first_name, last_name } = evt.data;
         const email = email_addresses?.[0]?.email_address || "";
         const displayName = first_name || last_name 
           ? `${first_name || ""} ${last_name || ""}`.trim()
@@ -83,10 +88,10 @@ async function startServer() {
         }
       }
       
-      res.json({ success: true });
+      res.send('Webhook received');
     } catch (error) {
-      console.error("Webhook error:", error);
-      res.status(500).json({ error: "Webhook processing failed" });
+      console.error('Error verifying webhook:', error);
+      res.status(400).send('Error verifying webhook');
     }
   });
 
