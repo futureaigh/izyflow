@@ -141,6 +141,27 @@ async function startServer() {
         console.log(`User logged out: ${user_id}`);
       }
       
+      // Session events - track user activity
+      if (evt.type === "session.created") {
+        const { user_id } = evt.data;
+        
+        // Update last_seen timestamp
+        await db.update(users)
+          .set({ lastSeen: new Date().toISOString() })
+          .where(eq(users.uid, user_id));
+        console.log(`User logged in: ${user_id}`);
+      }
+      
+      if (evt.type === "session.ended" || evt.type === "session.revoked") {
+        const { user_id } = evt.data;
+        
+        // Update last_seen timestamp on logout
+        await db.update(users)
+          .set({ lastSeen: new Date().toISOString() })
+          .where(eq(users.uid, user_id));
+        console.log(`User logged out: ${user_id}`);
+      }
+      
       res.send('Webhook received');
     } catch (error) {
       console.error('Error verifying webhook:', error);
