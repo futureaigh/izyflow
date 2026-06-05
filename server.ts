@@ -409,6 +409,31 @@ async function startServer() {
     }
   });
 
+  app.put("/api/workspaces/:id", requireAuthMiddleware(), async (req: any, res) => {
+    const { id } = req.params;
+    const data = req.body;
+    try {
+      const updateData = {
+        ...data,
+        incomeCategories: data.incomeCategories ? JSON.stringify(data.incomeCategories) : undefined,
+        expenseCategories: data.expenseCategories ? JSON.stringify(data.expenseCategories) : undefined,
+        investmentCategories: data.investmentCategories ? JSON.stringify(data.investmentCategories) : undefined,
+        paymentMethods: data.paymentMethods ? JSON.stringify(data.paymentMethods) : undefined,
+      };
+      const [updated] = await db.update(workspaces).set(updateData).where(eq(workspaces.id, id)).returning();
+      res.json({
+        ...updated,
+        incomeCategories: safeParse(updated.incomeCategories),
+        expenseCategories: safeParse(updated.expenseCategories),
+        investmentCategories: safeParse(updated.investmentCategories),
+        paymentMethods: safeParse(updated.paymentMethods),
+      });
+    } catch (err) {
+      console.error("Error in PUT /api/workspaces:", err);
+      res.status(500).json({ error: "Failed to update workspace" });
+    }
+  });
+
   // --- ACCOUNTS ENDPOINTS ---
   app.get("/api/workspaces/:workspaceId/accounts", requireAuthMiddleware(), async (req, res) => {
     const { workspaceId } = req.params;
@@ -924,6 +949,29 @@ async function startServer() {
     }
   });
 
+  app.put("/api/workspaces/:workspaceId/staff/:id", requireAuthMiddleware(), async (req, res) => {
+    const { id } = req.params;
+    const data = req.body;
+    try {
+      const [updated] = await db.update(staff).set(data).where(eq(staff.id, id)).returning();
+      res.json(updated);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to update staff member" });
+    }
+  });
+
+  app.delete("/api/workspaces/:workspaceId/staff/:id", requireAuthMiddleware(), async (req, res) => {
+    const { id } = req.params;
+    try {
+      await db.delete(staff).where(eq(staff.id, id));
+      res.json({ success: true });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to delete staff member" });
+    }
+  });
+
   // --- STAFF RECEIPT ENDPOINTS ---
   app.get("/api/workspaces/:workspaceId/staff-receipts", requireAuthMiddleware(), async (req, res) => {
     const { workspaceId } = req.params;
@@ -957,6 +1005,17 @@ async function startServer() {
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to create staff receipt" });
+    }
+  });
+
+  app.delete("/api/workspaces/:workspaceId/staff-receipts/:id", requireAuthMiddleware(), async (req, res) => {
+    const { id } = req.params;
+    try {
+      await db.delete(staffReceipts).where(eq(staffReceipts.id, id));
+      res.json({ success: true });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to delete staff receipt" });
     }
   });
 
@@ -1021,6 +1080,112 @@ async function startServer() {
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch public catalog" });
+    }
+  });
+
+  app.get("/api/public/workspace/:id", async (req, res) => {
+    const { id } = req.params;
+    try {
+      const [ws] = await db.select().from(workspaces).where(eq(workspaces.id, id));
+      if (!ws) {
+        return res.status(404).json({ error: "Workspace not found" });
+      }
+      res.json({
+        id: ws.id,
+        name: ws.name,
+        logoUrl: ws.logoUrl,
+        currency: ws.currency,
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch public workspace details" });
+    }
+  });
+
+  app.post("/api/public/catalog/:workspaceId/checkout", async (req, res) => {
+    const { workspaceId } = req.params;
+    const { customerName, customerEmail, cart, cartTotal } = req.body;
+    try {
+      const [ws] = await db.select().from(workspaces).where(eq(workspaces.id, workspaceId));
+      if (!ws) {
+        return res.status(404).json({ error: "Workspace not found" });
+      }
+
+      const invoiceId = Math.random().toString(36).substring(2, 11).toUpperCase();
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + 7);
+
+      const invoiceData = {
+        id: invoiceId,
+        workspaceId,
+        clientName: customerName,
+        clientEmail: customerEmail,
+        amount: cartTotal,
+        currency: ws.currency,
+        status: 'Paid',
+        createdAt: new Date().toISOString(),
+        dueDate: dueDate.toISOString(),
+        updatedAt: new Date().toISOString(),
+        items: JSON.stringify(cart.map((c: any) => ({
+          name: c.item.name,
+          description: c.item.description,
+          quantity: c.quantity,
+          price: c.item.price
+        }))),
+        paidAmount: cartTotal,
+        introduction: `Order placed via public catalog by ${customerName}.`
+      };
+
+      const [insertedInvoice] = await db.insert(invoices).values(invoiceData).returning();
+
+      const accountsList = await db.select().from(accounts).where(eq(accounts.workspaceId, workspaceId));
+      const rulesList = await db.select().from(allocationRules).where(eq(allocationRules.workspaceId, workspaceId));
+
+      const defaultAccount = accountsList.find(a => a.isDefault) || accountsList[0];
+      const accountId = rulesList.length > 0 ? 'auto-allocate' : (defaultAccount?.id || '');
+
+      const transactionId = Math.random().toString(36).substring(2, 11).toUpperCase();
+      const transactionData = {
+        id: transactionId,
+        workspaceId,
+        type: 'Income',
+        amount: cartTotal,
+        currency: ws.currency,
+        category: 'Catalog Sale',
+        date: new Date().toISOString().split('T')[0],
+        description: `Sale to ${customerName} via Public Catalog`,
+        payeePayer: customerName,
+        invoiceId: insertedInvoice.id,
+        accountId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      await db.insert(transactions).values(transactionData);
+
+      if (accountId === 'auto-allocate') {
+        for (const rule of rulesList) {
+          const allocationAmount = (cartTotal * rule.percentage) / 100;
+          const account = accountsList.find(a => a.id === rule.targetAccountId);
+          if (account) {
+            await db.update(accounts)
+              .set({ balance: account.balance + allocationAmount })
+              .where(eq(accounts.id, account.id));
+          }
+        }
+      } else if (accountId) {
+        const account = accountsList.find(a => a.id === accountId);
+        if (account) {
+          await db.update(accounts)
+            .set({ balance: account.balance + cartTotal })
+            .where(eq(accounts.id, accountId));
+        }
+      }
+
+      res.json({ success: true, invoice: insertedInvoice });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to place order" });
     }
   });
 

@@ -30,6 +30,7 @@ import {
   DialogDescription
 } from './ui/dialog';
 import { Badge } from './ui/badge';
+import { api } from '../lib/api';
 
 interface PublicCatalogProps {
   workspaceId: string;
@@ -51,40 +52,30 @@ export function PublicCatalog({ workspaceId }: PublicCatalogProps) {
   useEffect(() => {
     const fetchWorkspace = async () => {
       try {
-        const wsDoc = await getDoc(doc(db, 'workspaces', workspaceId));
-        if (wsDoc.exists()) {
-          setWorkspace({ id: wsDoc.id, ...wsDoc.data() } as Workspace);
-        } else {
-          toast.error('Workspace not found');
-        }
+        const wsData = await api.getPublicWorkspace(workspaceId);
+        setWorkspace(wsData);
       } catch (error) {
         console.error(error);
+        toast.error('Workspace not found');
       }
     };
 
-    const fetchItems = () => {
-      const q = query(
-        collection(db, `workspaces/${workspaceId}/catalogItems`),
-        orderBy('name', 'asc')
-      );
-      return onSnapshot(q, (snapshot) => {
-        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CatalogItem));
+    const fetchItems = async () => {
+      try {
+        const data = await api.getPublicCatalog(workspaceId);
         setItems(data);
         localStorage.setItem(`public_catalog_${workspaceId}`, JSON.stringify(data));
+      } catch (error) {
+        console.error(error);
+        const cached = localStorage.getItem(`public_catalog_${workspaceId}`);
+        if (cached) setItems(JSON.parse(cached));
+      } finally {
         setLoading(false);
-      }, (error) => {
-        const result: any = handleFirestoreError(error, 'list', 'catalogItems');
-        if (result?.isQuotaError) {
-          const cached = localStorage.getItem(`public_catalog_${workspaceId}`);
-          if (cached) setItems(JSON.parse(cached));
-        }
-        setLoading(false);
-      });
+      }
     };
 
     fetchWorkspace();
-    const unsub = fetchItems();
-    return () => unsub();
+    fetchItems();
   }, [workspaceId]);
 
   const addToCart = (item: CatalogItem) => {
@@ -113,71 +104,12 @@ export function PublicCatalog({ workspaceId }: PublicCatalogProps) {
 
     setIsProcessing(true);
     try {
-      const batch = writeBatch(db);
-      const invoiceId = Math.random().toString(36).substr(2, 9).toUpperCase();
-      const dueDate = new Date();
-      dueDate.setDate(dueDate.getDate() + 7);
-
-      const invoiceData = {
-        workspaceId: workspace.id,
-        clientName: customerName,
-        clientEmail: customerEmail,
-        amount: cartTotal,
-        currency: workspace.currency,
-        status: 'Paid', // Assuming instant payment for catalog orders
-        createdAt: new Date().toISOString(),
-        dueDate: dueDate.toISOString(),
-        updatedAt: new Date().toISOString(),
-        items: cart.map(c => ({
-          name: c.item.name,
-          description: c.item.description,
-          quantity: c.quantity,
-          price: c.item.price
-        })),
-        paidAmount: cartTotal,
-        introduction: `Order placed via public catalog by ${customerName}.`
-      };
-
-      // 1. Create Invoice
-      const invoiceRef = doc(collection(db, `workspaces/${workspace.id}/invoices`));
-      batch.set(invoiceRef, invoiceData);
-
-      // 2. Create Transaction
-      const transactionRef = doc(collection(db, `workspaces/${workspace.id}/transactions`));
-      
-      const accountsSnap = await getDocs(collection(db, `workspaces/${workspace.id}/accounts`));
-      const rulesSnap = await getDocs(collection(db, `workspaces/${workspace.id}/allocationRules`));
-      
-      batch.set(transactionRef, {
-        workspaceId: workspace.id,
-        type: 'Income',
-        amount: cartTotal,
-        currency: workspace.currency,
-        category: 'Catalog Sale',
-        date: new Date().toISOString().split('T')[0],
-        time: format(new Date(), 'HH:mm'),
-        description: `Sale to ${customerName} via Public Catalog`,
-        payeePayer: customerName,
-        invoiceId: invoiceRef.id,
-        accountId: rulesSnap.docs.length > 0 ? 'auto-allocate' : (accountsSnap.docs.find(d => d.data().isDefault)?.id || accountsSnap.docs[0]?.id || ''),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+      await api.publicCheckout(workspace.id, {
+        customerName,
+        customerEmail,
+        cart,
+        cartTotal
       });
-
-      // 3. Split Revenue
-      const accounts = accountsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Account));
-      const rules = rulesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as AllocationRule));
-
-      rules.forEach(rule => {
-        const allocationAmount = (cartTotal * rule.percentage) / 100;
-        const account = accounts.find(a => a.id === rule.targetAccountId);
-        if (account) {
-          const accountRef = doc(db, `workspaces/${workspace.id}/accounts`, account.id);
-          batch.update(accountRef, { balance: account.balance + allocationAmount });
-        }
-      });
-
-      await batch.commit();
       setSuccess(true);
       toast.success('Order placed successfully!');
     } catch (error) {

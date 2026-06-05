@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
 import { motion, AnimatePresence } from 'motion/react';
+import { api } from '../lib/api';
 import { X, Send, Bot, User, Loader2, MessageSquare, Sparkles, Check, AlertCircle, PieChart as ChartIcon, TrendingUp, TrendingDown, DollarSign, Download } from 'lucide-react';
 import { Transaction, Invoice, Account, Workspace, TransactionType, UserProfile } from '../types';
 import { cn } from '../lib/utils';
@@ -491,21 +492,6 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
       }
     } catch (error: any) {
       console.error('AI Error:', error);
-      
-      // Log detailed error for admin
-      try {
-        if (user?.uid) {
-          addDoc(collection(db, 'izy_errors'), {
-            userId: user.uid,
-            error: error.message || String(error),
-            timestamp: new Date().toISOString(),
-            query: userMessage,
-            model: "gemini-3-flash-preview"
-          });
-        }
-      } catch (e) {
-        console.error('Failed to log izy error:', e);
-      }
 
       setMessages(prev => [...prev, { 
         role: 'assistant', 
@@ -521,7 +507,6 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
   const confirmTransaction = async (tx: PendingTransaction, index: number) => {
     if (!workspace) return;
     setIsLoading(true);
-    const path = `workspaces/${workspace.id}/transactions`;
     try {
       // Normalize date to YYYY-MM-DD
       let date = tx.date;
@@ -549,16 +534,16 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
       if (tx.payeePayer) transactionData.payeePayer = tx.payeePayer;
       if (tx.time) transactionData.time = tx.time;
 
-      const docRef = await addDoc(collection(db, path), transactionData);
+      const createdTx = await api.createTransaction(workspace.id, transactionData);
       
       toast.success('Transaction recorded successfully!', {
         action: {
           label: 'Undo',
           onClick: async () => {
             try {
-              await deleteDoc(docRef);
+              await api.deleteTransaction(workspace.id, createdTx.id);
               toast.success('Transaction removed');
-              // Reset message state if possible, but toast is usually enough
+              window.dispatchEvent(new CustomEvent('refresh-data'));
             } catch (e) {
               toast.error('Failed to undo');
             }
@@ -566,6 +551,8 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
         }
       });
       
+      window.dispatchEvent(new CustomEvent('refresh-data'));
+
       // Update messages to show confirmation
       setMessages(prev => prev.map((msg, i) => {
         if (i === index) {
@@ -576,7 +563,6 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
     } catch (error) {
       console.error('Error saving transaction:', error);
       toast.error('Failed to record transaction');
-      handleFirestoreError(error, OperationType.WRITE, path);
     } finally {
       setIsLoading(false);
     }
@@ -585,7 +571,6 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
   const confirmInvoice = async (invoice: PendingInvoice, index: number) => {
     if (!workspace) return;
     setIsLoading(true);
-    const path = `workspaces/${workspace.id}/invoices`;
     try {
       let dueDate;
       try {
@@ -613,10 +598,11 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
         updatedAt: new Date().toISOString()
       };
 
-      await addDoc(collection(db, path), invoiceData);
+      await api.createInvoice(workspace.id, invoiceData);
       
       toast.success("Invoice recorded successfully!");
-      
+      window.dispatchEvent(new CustomEvent('refresh-data'));
+
       setMessages(prev => prev.map((msg, i) => {
         if (i === index) {
           return { ...msg, content: "Invoice recorded! ✅", pendingInvoice: undefined };
@@ -626,7 +612,6 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
     } catch (error) {
       console.error('Error saving invoice:', error);
       toast.error("Failed to record invoice.");
-      handleFirestoreError(error, OperationType.WRITE, path);
     } finally {
       setIsLoading(false);
     }
@@ -636,28 +621,23 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
     if (!workspace) return;
     setIsLoading(true);
     try {
-      const batch = writeBatch(db);
-      pending.transactionIds.forEach(id => {
-        const docRef = doc(db, `workspaces/${workspace.id}/transactions`, id);
-        batch.delete(docRef);
-      });
-      await batch.commit();
+      for (const id of pending.transactionIds) {
+        await api.deleteTransaction(workspace.id, id);
+      }
       
       toast.success(`${pending.transactionIds.length} transaction(s) deleted!`, {
         action: {
           label: 'Undo',
           onClick: async () => {
             try {
-              const restoreBatch = writeBatch(db);
-              pending.transactionIds.forEach(id => {
+              for (const id of pending.transactionIds) {
                 const original = transactions.find(t => t.id === id);
                 if (original) {
-                  const { id: _, ...data } = original;
-                  restoreBatch.set(doc(db, `workspaces/${workspace.id}/transactions`, id), data);
+                  await api.createTransaction(workspace.id, original);
                 }
-              });
-              await restoreBatch.commit();
+              }
               toast.success('Transactions restored');
+              window.dispatchEvent(new CustomEvent('refresh-data'));
             } catch (e) {
               toast.error('Failed to restore');
             }
@@ -665,6 +645,8 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
         }
       });
       
+      window.dispatchEvent(new CustomEvent('refresh-data'));
+
       setMessages(prev => prev.map((msg, i) => {
         if (i === index) {
           return { ...msg, content: "Transactions deleted! 🗑️", pendingDelete: undefined };
@@ -682,17 +664,16 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
   const confirmUpdate = async (pending: PendingUpdate, index: number) => {
     if (!workspace) return;
     setIsLoading(true);
-    const path = `workspaces/${workspace.id}/transactions/${pending.transactionId}`;
     try {
-      const docRef = doc(db, `workspaces/${workspace.id}/transactions`, pending.transactionId);
       const updateData = {
         ...pending.updates,
         updatedAt: new Date().toISOString()
       };
-      await updateDoc(docRef, updateData);
+      await api.updateTransaction(workspace.id, pending.transactionId, updateData);
       
       toast.success("Transaction updated successfully!");
-      
+      window.dispatchEvent(new CustomEvent('refresh-data'));
+
       setMessages(prev => prev.map((msg, i) => {
         if (i === index) {
           return { ...msg, content: "Transaction updated! ✏️", pendingUpdate: undefined };
@@ -702,7 +683,6 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
     } catch (error) {
       console.error('Error updating transaction:', error);
       toast.error("Failed to update transaction.");
-      handleFirestoreError(error, OperationType.WRITE, path);
     } finally {
       setIsLoading(false);
     }
@@ -711,16 +691,15 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
   const confirmWorkspaceUpdate = async (pending: PendingWorkspaceUpdate, index: number) => {
     if (!workspace) return;
     setIsLoading(true);
-    const path = `workspaces/${workspace.id}`;
     try {
-      const docRef = doc(db, path);
-      await updateDoc(docRef, {
+      await api.updateWorkspace(workspace.id, {
         ...pending.updates,
         updatedAt: new Date().toISOString()
       });
       
       toast.success("Workspace settings updated!");
-      
+      window.dispatchEvent(new CustomEvent('refresh-workspaces'));
+
       setMessages(prev => prev.map((msg, i) => {
         if (i === index) {
           return { ...msg, content: "Workspace updated! 🏢", pendingWorkspaceUpdate: undefined };
@@ -730,7 +709,6 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
     } catch (error) {
       console.error('Error updating workspace:', error);
       toast.error("Failed to update workspace.");
-      handleFirestoreError(error, OperationType.WRITE, path);
     } finally {
       setIsLoading(false);
     }
@@ -739,16 +717,15 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
   const confirmAccountUpdate = async (pending: PendingAccountUpdate, index: number) => {
     if (!workspace) return;
     setIsLoading(true);
-    const path = `workspaces/${workspace.id}/accounts/${pending.accountId}`;
     try {
-      const docRef = doc(db, `workspaces/${workspace.id}/accounts`, pending.accountId);
-      await updateDoc(docRef, {
+      await api.updateAccount(workspace.id, pending.accountId, {
         ...pending.updates,
         updatedAt: new Date().toISOString()
       });
       
       toast.success("Account updated successfully!");
-      
+      window.dispatchEvent(new CustomEvent('refresh-data'));
+
       setMessages(prev => prev.map((msg, i) => {
         if (i === index) {
           return { ...msg, content: "Account updated! 💰", pendingAccountUpdate: undefined };
@@ -758,7 +735,6 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
     } catch (error) {
       console.error('Error updating account:', error);
       toast.error("Failed to update account.");
-      handleFirestoreError(error, OperationType.WRITE, path);
     } finally {
       setIsLoading(false);
     }
@@ -767,10 +743,8 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
   const confirmPreferenceUpdate = async (pending: PendingPreferenceUpdate, index: number) => {
     if (!user) return;
     setIsLoading(true);
-    const path = `users/${user.uid}`;
     try {
-      const docRef = doc(db, path);
-      await updateDoc(docRef, {
+      await api.updateProfile({
         preferences: {
           ...user.preferences,
           ...pending.updates
@@ -789,7 +763,6 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
     } catch (error) {
       console.error('Error updating preferences:', error);
       toast.error("Failed to update preferences.");
-      handleFirestoreError(error, OperationType.WRITE, path);
     } finally {
       setIsLoading(false);
     }

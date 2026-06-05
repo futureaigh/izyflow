@@ -37,6 +37,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { Badge } from './ui/badge';
+import { api } from '../lib/api';
 
 interface CatalogProps {
   workspace: Workspace | null;
@@ -61,36 +62,31 @@ export function Catalog({ workspace, onSelect, mode = 'manage' }: CatalogProps) 
   const [category, setCategory] = useState('');
   const [type, setType] = useState<'Product' | 'Service'>('Product');
 
-  useEffect(() => {
+  const fetchItems = async () => {
     if (!workspace) return;
-
-    const q = query(
-      collection(db, `workspaces/${workspace.id}/catalogItems`),
-      orderBy('name', 'asc')
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CatalogItem));
+    try {
+      setLoading(true);
+      const data = await api.getCatalogItems(workspace.id);
       setItems(data);
       localStorage.setItem(`catalog_${workspace.id}`, JSON.stringify(data));
+    } catch (error) {
+      console.error(error);
+      const cached = localStorage.getItem(`catalog_${workspace.id}`);
+      if (cached) setItems(JSON.parse(cached));
+    } finally {
       setLoading(false);
-    }, (error) => {
-      const result: any = handleFirestoreError(error, 'list', 'catalogItems');
-      if (result?.isQuotaError) {
-        const cached = localStorage.getItem(`catalog_${workspace.id}`);
-        if (cached) setItems(JSON.parse(cached));
-      }
-      setLoading(false);
-    });
+    }
+  };
 
-    return () => unsubscribe();
+  useEffect(() => {
+    fetchItems();
   }, [workspace]);
 
   const categories = ['All', ...Array.from(new Set(items.map(i => i.category).filter(Boolean)))];
 
   const filteredItems = items.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                         item.description.toLowerCase().includes(searchQuery.toLowerCase());
+                          item.description.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = categoryFilter === 'All' || item.category === categoryFilter;
     const matchesType = typeFilter === 'All' || item.type === typeFilter;
     return matchesSearch && matchesCategory && matchesType;
@@ -120,17 +116,18 @@ export function Catalog({ workspace, onSelect, mode = 'manage' }: CatalogProps) 
       };
 
       if (editingItem) {
-        await updateDoc(doc(db, `workspaces/${workspace.id}/catalogItems`, editingItem.id), itemData);
+        await api.updateCatalogItem(workspace.id, editingItem.id, itemData);
         toast.success('Item updated');
       } else {
-        await addDoc(collection(db, `workspaces/${workspace.id}/catalogItems`), {
+        await api.createCatalogItem(workspace.id, {
           ...itemData,
-          workspaceId: workspace.id,
+          id: Math.random().toString(36).substring(2) + Date.now().toString(36),
           createdAt: new Date().toISOString()
         });
         toast.success('Item added to catalog');
       }
       resetForm();
+      fetchItems();
     } catch (error) {
       console.error(error);
       toast.error('Failed to save item');
@@ -150,8 +147,9 @@ export function Catalog({ workspace, onSelect, mode = 'manage' }: CatalogProps) 
   const deleteItem = async (id: string) => {
     if (!workspace) return;
     try {
-      await deleteDoc(doc(db, `workspaces/${workspace.id}/catalogItems`, id));
+      await api.deleteCatalogItem(workspace.id, id);
       toast.success('Item removed from catalog');
+      fetchItems();
     } catch (error) {
       toast.error('Failed to delete item');
     }
