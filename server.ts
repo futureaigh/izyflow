@@ -47,10 +47,17 @@ async function startServer() {
   app.use(cors());
   app.use(express.json());
   
-  // Register Clerk Auth Middleware (excludes webhook route)
+  // Register Clerk Auth Middleware (excludes webhook route and health check)
   app.use(clerkMiddleware({
-    excludedRoutes: ['/api/webhooks/clerk']
+    excludedRoutes: ['/api/webhooks/clerk', '/api/health']
   }));
+
+  // ============================================
+  // HEALTH CHECK ENDPOINT
+  // ============================================
+  app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
 
   // ============================================
   // CLERK WEBHOOK ENDPOINT (Complete Event Handling)
