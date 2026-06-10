@@ -2,6 +2,6 @@
 buildCommand = "npm install"
 
 [deploy]
-startCommand = "npm start"
+startCommand = "tsx server.ts"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
