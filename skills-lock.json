@@ -6,6 +6,12 @@
       "sourceType": "local",
       "computedHash": "40da1ab8bae6401f5f70657f176473f646ef517279383b0f53a3a6c75603ce68"
     },
+    "damz-turso-clerk-spinner": {
+      "source": "sammydamz/damz-turso-clerk-spinner",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "0f2591b9c62f0e6570f2c949ab1cb7b0ebed5890ce0067ccf426dfa25c3e7d2f"
+    },
     "turso-db": {
       "source": "tursodatabase/agent-skills",
       "sourceType": "github",
