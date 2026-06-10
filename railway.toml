@@ -1,7 +1,7 @@
 [build]
-buildCommand = "npm install -g pnpm && pnpm install"
+buildCommand = "npm install"
 
 [deploy]
-startCommand = "pnpm start"
+startCommand = "npm start"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
