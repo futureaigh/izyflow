@@ -1,5 +1,5 @@
 [build]
-buildCommand = "pnpm install"
+buildCommand = "npm install -g pnpm && pnpm install"
 
 [deploy]
 startCommand = "pnpm start"
