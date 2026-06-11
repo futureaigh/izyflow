@@ -12,11 +12,15 @@ coverage/
 izyflow-beta/
 # Audit results files
 *.json
+!package.json
+!package-lock.json
 *.html
+!index.html
 *.csv
 /audit-results/
 *.png
 performance-*.json
 *.heapsnapshot
 *-screenshot.png
+/test-scripts/
 *.js

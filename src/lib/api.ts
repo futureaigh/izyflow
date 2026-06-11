@@ -1,13 +1,15 @@
-let activeToken: string | null = null;
+let getToken: (() => Promise<string | null>) | null = null;
 
-export const setAuthToken = (token: string | null) => {
-  activeToken = token;
+export const setTokenGetter = (fn: typeof getToken) => {
+  getToken = fn;
 };
 
 const fetchAPI = async (endpoint: string, options: RequestInit = {}) => {
+  const token = getToken ? await getToken() : null;
+
   const headers = {
     "Content-Type": "application/json",
-    ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...options.headers,
   };
   

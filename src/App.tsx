@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useClerk } from '@clerk/react';
-import { api, setAuthToken } from './lib/api';
+import { api, setTokenGetter } from './lib/api';
 import { Workspace, UserProfile, CMSConfig } from './types';
 import { Sidebar } from './components/Sidebar';
 import { Sheet, SheetContent, SheetTrigger } from './components/ui/sheet';
@@ -231,9 +231,8 @@ export default function App({ auth }: AppProps) {
           setLoading(true);
           setWorkspacesLoading(true);
           
-          // Set active authorization token for API calls
-          const token = await auth.getToken();
-          setAuthToken(token);
+          // Set token getter — fetches fresh token per-request
+          setTokenGetter(auth.getToken);
 
           // Fetch user profile from backend database
           let profile: UserProfile;
@@ -419,7 +418,7 @@ export default function App({ auth }: AppProps) {
   const handleSignOut = async () => {
     try {
       await auth.signOut();
-      setAuthToken(null);
+      setTokenGetter(null);
       toast.success('Signed out successfully');
     } catch (error) {
       toast.error('Failed to sign out');

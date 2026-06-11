@@ -28,7 +28,23 @@ function ClerkAppWrapper() {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/">
+      <ClerkProvider 
+        publishableKey={PUBLISHABLE_KEY} 
+        afterSignOutUrl="/"
+        appearance={{
+          elements: {
+            form: {
+              primaryButton: {
+                borderRadius: '0.5rem',
+              },
+            },
+          },
+        }}
+        sessionOptions={{
+          // Increase session duration to 30 days
+          sessionDurationInMinutes: 30 * 24 * 60,
+        }}
+      >
         <ClerkAppWrapper />
       </ClerkProvider>
     </ErrorBoundary>
