@@ -23,4 +23,9 @@ performance-*.json
 *.heapsnapshot
 *-screenshot.png
 /test-scripts/
-*.js
+/scripts/*.js
+/src/utils/performance*.js
+/src/utils/load-strategy*.js
+/src/utils/deferload*.js
+/src/performance-init*.js
+vite.config.*.js
