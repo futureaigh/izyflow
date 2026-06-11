@@ -37,7 +37,8 @@ try {
 export async function withCache<T>(
   key: string,
   ttl: number,
-  fetchFn: () => Promise<T>
+  fetchFn: () => Promise<T>,
+  options?: { skipCacheOnNull?: boolean }
 ): Promise<T> {
   if (!redis) return fetchFn();
 
@@ -52,6 +53,10 @@ export async function withCache<T>(
 
   const data = await fetchFn();
 
+  if (options?.skipCacheOnNull && (data === null || data === undefined)) {
+    return data;
+  }
+
   try {
     await redis.setex(key, ttl, JSON.stringify(data));
   } catch {
@@ -61,19 +66,23 @@ export async function withCache<T>(
   return data;
 }
 
-export async function invalidateCache(pattern: string): Promise<void> {
+export async function invalidateCache(key: string): Promise<void> {
   if (!redis) return;
 
   try {
-    let cursor = "0";
-    do {
-      const result = await redis.scan(cursor, "MATCH", pattern, "COUNT", 50);
-      cursor = result[0];
-      const keys = result[1];
-      if (keys.length > 0) {
-        await redis.del(...keys);
-      }
-    } while (cursor !== "0");
+    if (key.includes("*") || key.includes("?") || key.includes("[")) {
+      let cursor = "0";
+      do {
+        const result = await redis.scan(cursor, "MATCH", key, "COUNT", 50);
+        cursor = result[0];
+        const keys = result[1];
+        if (keys.length > 0) {
+          await redis.del(...keys);
+        }
+      } while (cursor !== "0");
+    } else {
+      await redis.del(key);
+    }
   } catch {
     // invalidation failure is non-fatal
   }
@@ -93,10 +102,11 @@ export async function rateLimit(
   }
 
   try {
-    const current = await redis.incr(key);
-    if (current === 1) {
-      await redis.expire(key, windowSeconds);
+    const first = await redis.set(key, "1", "EX", windowSeconds, "NX");
+    if (first === "OK") {
+      return { allowed: true, remaining: maxRequests - 1, ttl: windowSeconds };
     }
+    const current = await redis.incr(key);
     const ttl = await redis.ttl(key);
     return {
       allowed: current <= maxRequests,

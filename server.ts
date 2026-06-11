@@ -1203,7 +1203,8 @@ async function startServer() {
             logoUrl: ws.logoUrl,
             currency: ws.currency,
           };
-        }
+        },
+        { skipCacheOnNull: true }
       );
       if (!result) {
         return res.status(404).json({ error: "Workspace not found" });
