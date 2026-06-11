@@ -15,6 +15,7 @@ import {
   staff, staffReceipts, cmsConfigs 
 } from "./src/db/schema";
 import { eq, and } from "drizzle-orm";
+import { withCache, invalidateCache, buildCacheKey, rateLimit } from "./src/lib/redis";
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -280,15 +281,17 @@ async function startServer() {
     }
 
     try {
-      const response = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${secretKey}`,
-        },
-      });
-
-      const data = await response.json();
-      res.json(data);
+      const result = await withCache(
+        buildCacheKey("paystack", "verify", reference), 300,
+        async () => {
+          const response = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
+            method: "GET",
+            headers: { Authorization: `Bearer ${secretKey}` },
+          });
+          return response.json();
+        }
+      );
+      res.json(result);
     } catch (error) {
       console.error("Paystack verification error:", error);
       res.status(500).json({ error: "Failed to verify transaction" });
@@ -306,9 +309,24 @@ async function startServer() {
   app.post("/api/chat", requireAuthMiddleware(), async (req: any, res) => {
     const { contents, config, model = "gemini-2.5-flash" } = req.body;
     const apiKey = process.env.GEMINI_API_KEY;
+    const userId = req.auth.userId;
 
     if (!apiKey) {
       return res.status(500).json({ error: "GEMINI_API_KEY is not configured" });
+    }
+
+    // Rate-limit: 20 requests per minute per user
+    const rl = await rateLimit(
+      buildCacheKey("ratelimit", "chat", userId),
+      20, 60
+    );
+    if (!rl.allowed) {
+      res.setHeader("X-RateLimit-Remaining", rl.remaining);
+      res.setHeader("X-RateLimit-Reset", rl.ttl);
+      return res.status(429).json({
+        error: "Too many requests. Please wait before sending another message.",
+        retryAfter: rl.ttl
+      });
     }
 
     try {
@@ -333,32 +351,38 @@ async function startServer() {
   app.get("/api/users/me", requireAuthMiddleware(), async (req: any, res) => {
     const userId = req.auth.userId;
     try {
-      let [profile] = await db.select().from(users).where(eq(users.uid, userId));
-      if (!profile) {
-        // Fetch real email from Clerk API
-        let email = "";
-        try {
-          const clerkUser = await clerkClient.users.getUser(userId);
-          email = clerkUser.emailAddresses?.[0]?.emailAddress ?? "";
-        } catch {}
-        const displayName = email ? email.split("@")[0] : "User";
-        const newUser = {
-          uid: userId,
-          email,
-          displayName,
-          createdAt: new Date().toISOString(),
-          role: "User",
-          subscription: JSON.stringify({ plan: "Free", status: "Active" }),
-          preferences: JSON.stringify({ timeFormat: "12h", dateFormat: "yyyy-MM-dd" })
-        };
-        const [inserted] = await db.insert(users).values(newUser).returning();
-        profile = inserted;
-      }
-      res.json({
-        ...profile,
-        subscription: safeParse(profile.subscription),
-        preferences: safeParse(profile.preferences)
-      });
+      const result = await withCache(
+        buildCacheKey("user", userId, "profile"),
+        120,
+        async () => {
+          let [profile] = await db.select().from(users).where(eq(users.uid, userId));
+          if (!profile) {
+            let email = "";
+            try {
+              const clerkUser = await clerkClient.users.getUser(userId);
+              email = clerkUser.emailAddresses?.[0]?.emailAddress ?? "";
+            } catch {}
+            const displayName = email ? email.split("@")[0] : "User";
+            const newUser = {
+              uid: userId,
+              email,
+              displayName,
+              createdAt: new Date().toISOString(),
+              role: "User",
+              subscription: JSON.stringify({ plan: "Free", status: "Active" }),
+              preferences: JSON.stringify({ timeFormat: "12h", dateFormat: "yyyy-MM-dd" })
+            };
+            const [inserted] = await db.insert(users).values(newUser).returning();
+            profile = inserted;
+          }
+          return {
+            ...profile,
+            subscription: safeParse(profile.subscription),
+            preferences: safeParse(profile.preferences)
+          };
+        }
+      );
+      res.json(result);
     } catch (err) {
       console.error("Error in /api/users/me:", err);
       res.status(500).json({ error: "Failed to retrieve user profile" });
@@ -380,6 +404,8 @@ async function startServer() {
         .where(eq(users.uid, userId))
         .returning();
 
+      await invalidateCache(buildCacheKey("user", userId, "profile"));
+
       res.json({
         ...updated,
         subscription: safeParse(updated.subscription),
@@ -395,14 +421,20 @@ async function startServer() {
   app.get("/api/workspaces", requireAuthMiddleware(), async (req: any, res) => {
     const userId = req.auth.userId;
     try {
-      const rows = await db.select().from(workspaces).where(eq(workspaces.ownerId, userId));
-      const formatted = rows.map(w => ({
-        ...w,
-        incomeCategories: safeParse(w.incomeCategories),
-        expenseCategories: safeParse(w.expenseCategories),
-        investmentCategories: safeParse(w.investmentCategories),
-      }));
-      res.json(formatted);
+      const result = await withCache(
+        buildCacheKey("user", userId, "workspaces"),
+        60,
+        async () => {
+          const rows = await db.select().from(workspaces).where(eq(workspaces.ownerId, userId));
+          return rows.map(w => ({
+            ...w,
+            incomeCategories: safeParse(w.incomeCategories),
+            expenseCategories: safeParse(w.expenseCategories),
+            investmentCategories: safeParse(w.investmentCategories),
+          }));
+        }
+      );
+      res.json(result);
     } catch (err) {
       console.error("Error in GET /api/workspaces:", err);
       res.status(500).json({ error: "Failed to fetch workspaces" });
@@ -421,6 +453,7 @@ async function startServer() {
         investmentCategories: data.investmentCategories ? JSON.stringify(data.investmentCategories) : null,
       };
       const [inserted] = await db.insert(workspaces).values(newWorkspace).returning();
+      await invalidateCache(buildCacheKey("user", userId, "workspaces"));
       res.json({
         ...inserted,
         incomeCategories: safeParse(inserted.incomeCategories),
@@ -435,6 +468,7 @@ async function startServer() {
 
   app.put("/api/workspaces/:id", requireAuthMiddleware(), async (req: any, res) => {
     const { id } = req.params;
+    const userId = req.auth.userId;
     const data = req.body;
     try {
       const updateData = {
@@ -445,6 +479,7 @@ async function startServer() {
         paymentMethods: data.paymentMethods ? JSON.stringify(data.paymentMethods) : undefined,
       };
       const [updated] = await db.update(workspaces).set(updateData).where(eq(workspaces.id, id)).returning();
+      await invalidateCache(buildCacheKey("user", userId, "workspaces"));
       res.json({
         ...updated,
         incomeCategories: safeParse(updated.incomeCategories),
@@ -462,8 +497,11 @@ async function startServer() {
   app.get("/api/workspaces/:workspaceId/accounts", requireAuthMiddleware(), async (req, res) => {
     const { workspaceId } = req.params;
     try {
-      const rows = await db.select().from(accounts).where(eq(accounts.workspaceId, workspaceId));
-      res.json(rows);
+      const result = await withCache(
+        buildCacheKey("ws", workspaceId, "accounts"), 60,
+        () => db.select().from(accounts).where(eq(accounts.workspaceId, workspaceId))
+      );
+      res.json(result);
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch accounts" });
@@ -475,6 +513,7 @@ async function startServer() {
     const data = req.body;
     try {
       const [inserted] = await db.insert(accounts).values({ ...data, workspaceId }).returning();
+      await invalidateCache(buildCacheKey("ws", workspaceId, "accounts"));
       res.json(inserted);
     } catch (err) {
       console.error(err);
@@ -483,10 +522,11 @@ async function startServer() {
   });
 
   app.put("/api/workspaces/:workspaceId/accounts/:id", requireAuthMiddleware(), async (req, res) => {
-    const { id } = req.params;
+    const { workspaceId, id } = req.params;
     const data = req.body;
     try {
       const [updated] = await db.update(accounts).set(data).where(eq(accounts.id, id)).returning();
+      await invalidateCache(buildCacheKey("ws", workspaceId, "accounts"));
       res.json(updated);
     } catch (err) {
       console.error(err);
@@ -495,9 +535,10 @@ async function startServer() {
   });
 
   app.delete("/api/workspaces/:workspaceId/accounts/:id", requireAuthMiddleware(), async (req, res) => {
-    const { id } = req.params;
+    const { workspaceId, id } = req.params;
     try {
       await db.delete(accounts).where(eq(accounts.id, id));
+      await invalidateCache(buildCacheKey("ws", workspaceId, "accounts"));
       res.json({ success: true });
     } catch (err) {
       console.error(err);
@@ -509,8 +550,11 @@ async function startServer() {
   app.get("/api/workspaces/:workspaceId/allocation-rules", requireAuthMiddleware(), async (req, res) => {
     const { workspaceId } = req.params;
     try {
-      const rows = await db.select().from(allocationRules).where(eq(allocationRules.workspaceId, workspaceId));
-      res.json(rows);
+      const result = await withCache(
+        buildCacheKey("ws", workspaceId, "allocation-rules"), 60,
+        () => db.select().from(allocationRules).where(eq(allocationRules.workspaceId, workspaceId))
+      );
+      res.json(result);
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch allocation rules" });
@@ -522,6 +566,7 @@ async function startServer() {
     const data = req.body;
     try {
       const [inserted] = await db.insert(allocationRules).values({ ...data, workspaceId }).returning();
+      await invalidateCache(buildCacheKey("ws", workspaceId, "allocation-rules"));
       res.json(inserted);
     } catch (err) {
       console.error(err);
@@ -530,9 +575,10 @@ async function startServer() {
   });
 
   app.delete("/api/workspaces/:workspaceId/allocation-rules/:id", requireAuthMiddleware(), async (req, res) => {
-    const { id } = req.params;
+    const { workspaceId, id } = req.params;
     try {
       await db.delete(allocationRules).where(eq(allocationRules.id, id));
+      await invalidateCache(buildCacheKey("ws", workspaceId, "allocation-rules"));
       res.json({ success: true });
     } catch (err) {
       console.error(err);
@@ -544,8 +590,11 @@ async function startServer() {
   app.get("/api/workspaces/:workspaceId/transactions", requireAuthMiddleware(), async (req, res) => {
     const { workspaceId } = req.params;
     try {
-      const rows = await db.select().from(transactions).where(eq(transactions.workspaceId, workspaceId));
-      res.json(rows);
+      const result = await withCache(
+        buildCacheKey("ws", workspaceId, "transactions"), 60,
+        () => db.select().from(transactions).where(eq(transactions.workspaceId, workspaceId))
+      );
+      res.json(result);
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch transactions" });
@@ -560,10 +609,8 @@ async function startServer() {
       const isOutflow = data.type === 'Expense' || data.type === 'Investment';
       const isInflow = data.type === 'Income';
 
-      // 1. Create Transaction
       const [inserted] = await db.insert(transactions).values({ ...data, workspaceId }).returning();
 
-      // 2. Adjust Account Balances
       if (data.accountId === 'auto-allocate') {
         const rules = await db.select().from(allocationRules).where(eq(allocationRules.workspaceId, workspaceId));
         for (const rule of rules) {
@@ -585,7 +632,6 @@ async function startServer() {
         }
       }
 
-      // 3. Optional: Add payee as Contact if requested
       if (data.savePayeeAsContact && data.payeePayer) {
         const name = data.payeePayer.trim();
         const [existing] = await db.select().from(contacts)
@@ -601,6 +647,8 @@ async function startServer() {
         }
       }
 
+      await invalidateCache(buildCacheKey("ws", workspaceId, "transactions"));
+      await invalidateCache(buildCacheKey("ws", workspaceId, "accounts"));
       res.json(inserted);
     } catch (err) {
       console.error(err);
@@ -617,7 +665,6 @@ async function startServer() {
         return res.status(404).json({ error: "Transaction not found" });
       }
 
-      // 1. Reverse old transaction changes on accounts
       const oldAmount = oldTx.amount;
       const oldIsOutflow = oldTx.type === 'Expense' || oldTx.type === 'Investment';
       const oldIsInflow = oldTx.type === 'Income';
@@ -643,7 +690,6 @@ async function startServer() {
         }
       }
 
-      // 2. Apply new transaction changes on accounts
       const newAmount = Number(data.amount ?? oldTx.amount);
       const newType = data.type ?? oldTx.type;
       const newAccountId = data.accountId ?? oldTx.accountId;
@@ -671,8 +717,9 @@ async function startServer() {
         }
       }
 
-      // 3. Update Transaction record
       const [updated] = await db.update(transactions).set(data).where(eq(transactions.id, id)).returning();
+      await invalidateCache(buildCacheKey("ws", workspaceId, "transactions"));
+      await invalidateCache(buildCacheKey("ws", workspaceId, "accounts"));
       res.json(updated);
     } catch (err) {
       console.error(err);
@@ -688,7 +735,6 @@ async function startServer() {
         return res.status(404).json({ error: "Transaction not found" });
       }
 
-      // 1. If linked to an invoice, reverse the payment on the invoice
       if (tx.invoiceId) {
         const [inv] = await db.select().from(invoices).where(eq(invoices.id, tx.invoiceId));
         if (inv) {
@@ -705,7 +751,6 @@ async function startServer() {
         }
       }
 
-      // 2. Adjust Account Balances (Reverse the transaction change)
       const amountNum = tx.amount;
       const isOutflow = tx.type === 'Expense' || tx.type === 'Investment';
       const isInflow = tx.type === 'Income';
@@ -731,8 +776,10 @@ async function startServer() {
         }
       }
 
-      // 3. Delete the transaction record
       await db.delete(transactions).where(eq(transactions.id, id));
+      await invalidateCache(buildCacheKey("ws", workspaceId, "transactions"));
+      await invalidateCache(buildCacheKey("ws", workspaceId, "accounts"));
+      await invalidateCache(buildCacheKey("ws", workspaceId, "invoices"));
       res.json({ success: true });
     } catch (err) {
       console.error(err);
@@ -744,12 +791,14 @@ async function startServer() {
   app.get("/api/workspaces/:workspaceId/invoices", requireAuthMiddleware(), async (req, res) => {
     const { workspaceId } = req.params;
     try {
-      const rows = await db.select().from(invoices).where(eq(invoices.workspaceId, workspaceId));
-      const formatted = rows.map(i => ({
-        ...i,
-        items: safeParse(i.items)
-      }));
-      res.json(formatted);
+      const result = await withCache(
+        buildCacheKey("ws", workspaceId, "invoices"), 60,
+        async () => {
+          const rows = await db.select().from(invoices).where(eq(invoices.workspaceId, workspaceId));
+          return rows.map(i => ({ ...i, items: safeParse(i.items) }));
+        }
+      );
+      res.json(result);
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch invoices" });
@@ -766,6 +815,7 @@ async function startServer() {
         items: JSON.stringify(data.items)
       };
       const [inserted] = await db.insert(invoices).values(newInvoice).returning();
+      await invalidateCache(buildCacheKey("ws", workspaceId, "invoices"));
       res.json({
         ...inserted,
         items: safeParse(inserted.items)
@@ -777,16 +827,15 @@ async function startServer() {
   });
 
   app.put("/api/workspaces/:workspaceId/invoices/:id", requireAuthMiddleware(), async (req, res) => {
-    const { id } = req.params;
+    const { workspaceId, id } = req.params;
     const data = req.body;
     try {
-      const updateData = {
-        ...data,
-      };
+      const updateData = { ...data };
       if (data.items !== undefined) {
         updateData.items = JSON.stringify(data.items);
       }
       const [updated] = await db.update(invoices).set(updateData).where(eq(invoices.id, id)).returning();
+      await invalidateCache(buildCacheKey("ws", workspaceId, "invoices"));
       res.json({
         ...updated,
         items: safeParse(updated.items)
@@ -798,9 +847,10 @@ async function startServer() {
   });
 
   app.delete("/api/workspaces/:workspaceId/invoices/:id", requireAuthMiddleware(), async (req, res) => {
-    const { id } = req.params;
+    const { workspaceId, id } = req.params;
     try {
       await db.delete(invoices).where(eq(invoices.id, id));
+      await invalidateCache(buildCacheKey("ws", workspaceId, "invoices"));
       res.json({ success: true });
     } catch (err) {
       console.error(err);
@@ -812,8 +862,11 @@ async function startServer() {
   app.get("/api/workspaces/:workspaceId/catalog-items", requireAuthMiddleware(), async (req, res) => {
     const { workspaceId } = req.params;
     try {
-      const rows = await db.select().from(catalogItems).where(eq(catalogItems.workspaceId, workspaceId));
-      res.json(rows);
+      const result = await withCache(
+        buildCacheKey("ws", workspaceId, "catalog-items"), 60,
+        () => db.select().from(catalogItems).where(eq(catalogItems.workspaceId, workspaceId))
+      );
+      res.json(result);
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch catalog items" });
@@ -825,6 +878,7 @@ async function startServer() {
     const data = req.body;
     try {
       const [inserted] = await db.insert(catalogItems).values({ ...data, workspaceId }).returning();
+      await invalidateCache(buildCacheKey("ws", workspaceId, "catalog-items"));
       res.json(inserted);
     } catch (err) {
       console.error(err);
@@ -833,10 +887,11 @@ async function startServer() {
   });
 
   app.put("/api/workspaces/:workspaceId/catalog-items/:id", requireAuthMiddleware(), async (req, res) => {
-    const { id } = req.params;
+    const { workspaceId, id } = req.params;
     const data = req.body;
     try {
       const [updated] = await db.update(catalogItems).set(data).where(eq(catalogItems.id, id)).returning();
+      await invalidateCache(buildCacheKey("ws", workspaceId, "catalog-items"));
       res.json(updated);
     } catch (err) {
       console.error(err);
@@ -845,9 +900,10 @@ async function startServer() {
   });
 
   app.delete("/api/workspaces/:workspaceId/catalog-items/:id", requireAuthMiddleware(), async (req, res) => {
-    const { id } = req.params;
+    const { workspaceId, id } = req.params;
     try {
       await db.delete(catalogItems).where(eq(catalogItems.id, id));
+      await invalidateCache(buildCacheKey("ws", workspaceId, "catalog-items"));
       res.json({ success: true });
     } catch (err) {
       console.error(err);
@@ -859,12 +915,14 @@ async function startServer() {
   app.get("/api/workspaces/:workspaceId/pricing-calculations", requireAuthMiddleware(), async (req, res) => {
     const { workspaceId } = req.params;
     try {
-      const rows = await db.select().from(pricingCalculations).where(eq(pricingCalculations.workspaceId, workspaceId));
-      const formatted = rows.map(p => ({
-        ...p,
-        inputs: safeParse(p.inputs)
-      }));
-      res.json(formatted);
+      const result = await withCache(
+        buildCacheKey("ws", workspaceId, "pricing-calculations"), 60,
+        async () => {
+          const rows = await db.select().from(pricingCalculations).where(eq(pricingCalculations.workspaceId, workspaceId));
+          return rows.map(p => ({ ...p, inputs: safeParse(p.inputs) }));
+        }
+      );
+      res.json(result);
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch pricing calculations" });
@@ -881,6 +939,7 @@ async function startServer() {
         inputs: JSON.stringify(data.inputs)
       };
       const [inserted] = await db.insert(pricingCalculations).values(newCalc).returning();
+      await invalidateCache(buildCacheKey("ws", workspaceId, "pricing-calculations"));
       res.json({
         ...inserted,
         inputs: safeParse(inserted.inputs)
@@ -892,9 +951,10 @@ async function startServer() {
   });
 
   app.delete("/api/workspaces/:workspaceId/pricing-calculations/:id", requireAuthMiddleware(), async (req, res) => {
-    const { id } = req.params;
+    const { workspaceId, id } = req.params;
     try {
       await db.delete(pricingCalculations).where(eq(pricingCalculations.id, id));
+      await invalidateCache(buildCacheKey("ws", workspaceId, "pricing-calculations"));
       res.json({ success: true });
     } catch (err) {
       console.error(err);
@@ -906,8 +966,11 @@ async function startServer() {
   app.get("/api/workspaces/:workspaceId/contacts", requireAuthMiddleware(), async (req, res) => {
     const { workspaceId } = req.params;
     try {
-      const rows = await db.select().from(contacts).where(eq(contacts.workspaceId, workspaceId));
-      res.json(rows);
+      const result = await withCache(
+        buildCacheKey("ws", workspaceId, "contacts"), 60,
+        () => db.select().from(contacts).where(eq(contacts.workspaceId, workspaceId))
+      );
+      res.json(result);
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch contacts" });
@@ -919,6 +982,7 @@ async function startServer() {
     const data = req.body;
     try {
       const [inserted] = await db.insert(contacts).values({ ...data, workspaceId }).returning();
+      await invalidateCache(buildCacheKey("ws", workspaceId, "contacts"));
       res.json(inserted);
     } catch (err) {
       console.error(err);
@@ -927,10 +991,11 @@ async function startServer() {
   });
 
   app.put("/api/workspaces/:workspaceId/contacts/:id", requireAuthMiddleware(), async (req, res) => {
-    const { id } = req.params;
+    const { workspaceId, id } = req.params;
     const data = req.body;
     try {
       const [updated] = await db.update(contacts).set(data).where(eq(contacts.id, id)).returning();
+      await invalidateCache(buildCacheKey("ws", workspaceId, "contacts"));
       res.json(updated);
     } catch (err) {
       console.error(err);
@@ -939,9 +1004,10 @@ async function startServer() {
   });
 
   app.delete("/api/workspaces/:workspaceId/contacts/:id", requireAuthMiddleware(), async (req, res) => {
-    const { id } = req.params;
+    const { workspaceId, id } = req.params;
     try {
       await db.delete(contacts).where(eq(contacts.id, id));
+      await invalidateCache(buildCacheKey("ws", workspaceId, "contacts"));
       res.json({ success: true });
     } catch (err) {
       console.error(err);
@@ -953,8 +1019,11 @@ async function startServer() {
   app.get("/api/workspaces/:workspaceId/staff", requireAuthMiddleware(), async (req, res) => {
     const { workspaceId } = req.params;
     try {
-      const rows = await db.select().from(staff).where(eq(staff.workspaceId, workspaceId));
-      res.json(rows);
+      const result = await withCache(
+        buildCacheKey("ws", workspaceId, "staff"), 60,
+        () => db.select().from(staff).where(eq(staff.workspaceId, workspaceId))
+      );
+      res.json(result);
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch staff" });
@@ -966,6 +1035,7 @@ async function startServer() {
     const data = req.body;
     try {
       const [inserted] = await db.insert(staff).values({ ...data, workspaceId }).returning();
+      await invalidateCache(buildCacheKey("ws", workspaceId, "staff"));
       res.json(inserted);
     } catch (err) {
       console.error(err);
@@ -974,10 +1044,11 @@ async function startServer() {
   });
 
   app.put("/api/workspaces/:workspaceId/staff/:id", requireAuthMiddleware(), async (req, res) => {
-    const { id } = req.params;
+    const { workspaceId, id } = req.params;
     const data = req.body;
     try {
       const [updated] = await db.update(staff).set(data).where(eq(staff.id, id)).returning();
+      await invalidateCache(buildCacheKey("ws", workspaceId, "staff"));
       res.json(updated);
     } catch (err) {
       console.error(err);
@@ -986,9 +1057,10 @@ async function startServer() {
   });
 
   app.delete("/api/workspaces/:workspaceId/staff/:id", requireAuthMiddleware(), async (req, res) => {
-    const { id } = req.params;
+    const { workspaceId, id } = req.params;
     try {
       await db.delete(staff).where(eq(staff.id, id));
+      await invalidateCache(buildCacheKey("ws", workspaceId, "staff"));
       res.json({ success: true });
     } catch (err) {
       console.error(err);
@@ -1000,12 +1072,14 @@ async function startServer() {
   app.get("/api/workspaces/:workspaceId/staff-receipts", requireAuthMiddleware(), async (req, res) => {
     const { workspaceId } = req.params;
     try {
-      const rows = await db.select().from(staffReceipts).where(eq(staffReceipts.workspaceId, workspaceId));
-      const formatted = rows.map(r => ({
-        ...r,
-        items: safeParse(r.items)
-      }));
-      res.json(formatted);
+      const result = await withCache(
+        buildCacheKey("ws", workspaceId, "staff-receipts"), 60,
+        async () => {
+          const rows = await db.select().from(staffReceipts).where(eq(staffReceipts.workspaceId, workspaceId));
+          return rows.map(r => ({ ...r, items: safeParse(r.items) }));
+        }
+      );
+      res.json(result);
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch staff receipts" });
@@ -1022,6 +1096,7 @@ async function startServer() {
         items: JSON.stringify(data.items)
       };
       const [inserted] = await db.insert(staffReceipts).values(newReceipt).returning();
+      await invalidateCache(buildCacheKey("ws", workspaceId, "staff-receipts"));
       res.json({
         ...inserted,
         items: safeParse(inserted.items)
@@ -1033,9 +1108,10 @@ async function startServer() {
   });
 
   app.delete("/api/workspaces/:workspaceId/staff-receipts/:id", requireAuthMiddleware(), async (req, res) => {
-    const { id } = req.params;
+    const { workspaceId, id } = req.params;
     try {
       await db.delete(staffReceipts).where(eq(staffReceipts.id, id));
+      await invalidateCache(buildCacheKey("ws", workspaceId, "staff-receipts"));
       res.json({ success: true });
     } catch (err) {
       console.error(err);
@@ -1046,27 +1122,32 @@ async function startServer() {
   // --- CMS CONFIG ENDPOINTS ---
   app.get("/api/cms-config", async (req, res) => {
     try {
-      let [config] = await db.select().from(cmsConfigs).where(eq(cmsConfigs.id, "cms"));
-      if (!config) {
-        // Create default CMS config if not exists
-        const defaultConfig = {
-          id: "cms",
-          siteName: "IzyFlow",
-          heroBadgeText: "IzyInvoice is now IzyFlow!",
-          heroHeading: "Track Your Money. Know Your Business",
-          heroSubtext: "Send invoices, track your money and understand your business clearly with built-in tools to help you price your work right.",
-          faqs: JSON.stringify([]),
-          services: JSON.stringify([]),
-          hideBrandName: false
-        };
-        const [inserted] = await db.insert(cmsConfigs).values(defaultConfig).returning();
-        config = inserted;
-      }
-      res.json({
-        ...config,
-        faqs: safeParse(config.faqs),
-        services: safeParse(config.services),
-      });
+      const result = await withCache(
+        buildCacheKey("cms", "config"), 300,
+        async () => {
+          let [config] = await db.select().from(cmsConfigs).where(eq(cmsConfigs.id, "cms"));
+          if (!config) {
+            const defaultConfig = {
+              id: "cms",
+              siteName: "IzyFlow",
+              heroBadgeText: "IzyInvoice is now IzyFlow!",
+              heroHeading: "Track Your Money. Know Your Business",
+              heroSubtext: "Send invoices, track your money and understand your business clearly with built-in tools to help you price your work right.",
+              faqs: JSON.stringify([]),
+              services: JSON.stringify([]),
+              hideBrandName: false
+            };
+            const [inserted] = await db.insert(cmsConfigs).values(defaultConfig).returning();
+            config = inserted;
+          }
+          return {
+            ...config,
+            faqs: safeParse(config.faqs),
+            services: safeParse(config.services),
+          };
+        }
+      );
+      res.json(result);
     } catch (err) {
       console.error("Error fetching CMS config:", err);
       res.status(500).json({ error: "Failed to fetch CMS config" });
@@ -1074,16 +1155,14 @@ async function startServer() {
   });
 
   app.post("/api/cms-config", requireAuthMiddleware(), async (req: any, res) => {
-    // Basic Admin check (should verify req.auth.email or similar)
     const data = req.body;
     try {
-      const updateData = {
-        ...data,
-      };
+      const updateData = { ...data };
       if (data.faqs !== undefined) updateData.faqs = JSON.stringify(data.faqs);
       if (data.services !== undefined) updateData.services = JSON.stringify(data.services);
 
       const [updated] = await db.update(cmsConfigs).set(updateData).where(eq(cmsConfigs.id, "cms")).returning();
+      await invalidateCache(buildCacheKey("cms", "config"));
       res.json({
         ...updated,
         faqs: safeParse(updated.faqs),
@@ -1099,8 +1178,11 @@ async function startServer() {
   app.get("/api/public/catalog/:workspaceId", async (req, res) => {
     const { workspaceId } = req.params;
     try {
-      const rows = await db.select().from(catalogItems).where(eq(catalogItems.workspaceId, workspaceId));
-      res.json(rows);
+      const result = await withCache(
+        buildCacheKey("public", "catalog", workspaceId), 300,
+        () => db.select().from(catalogItems).where(eq(catalogItems.workspaceId, workspaceId))
+      );
+      res.json(result);
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch public catalog" });
@@ -1110,16 +1192,23 @@ async function startServer() {
   app.get("/api/public/workspace/:id", async (req, res) => {
     const { id } = req.params;
     try {
-      const [ws] = await db.select().from(workspaces).where(eq(workspaces.id, id));
-      if (!ws) {
+      const result = await withCache(
+        buildCacheKey("public", "workspace", id), 300,
+        async () => {
+          const [ws] = await db.select().from(workspaces).where(eq(workspaces.id, id));
+          if (!ws) return null;
+          return {
+            id: ws.id,
+            name: ws.name,
+            logoUrl: ws.logoUrl,
+            currency: ws.currency,
+          };
+        }
+      );
+      if (!result) {
         return res.status(404).json({ error: "Workspace not found" });
       }
-      res.json({
-        id: ws.id,
-        name: ws.name,
-        logoUrl: ws.logoUrl,
-        currency: ws.currency,
-      });
+      res.json(result);
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch public workspace details" });
