@@ -1329,6 +1329,17 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
                           >
                             <CreditCard className="h-4 w-4" />
                           </Button>
+                          {(invoice.status === 'Sent' || invoice.status === 'Partial') && ((invoice.amount || 0) - (invoice.paidAmount || 0)) > 0 && (
+                            <Button 
+                              size="icon" 
+                              variant="ghost" 
+                              onClick={() => markAsPaid(invoice)}
+                              className="h-9 w-9 text-green-600 hover:bg-green-50/50 rounded-xl"
+                              title="Mark as Paid"
+                            >
+                              <CheckCircle2 className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button 
                             size="icon" 
                             variant="ghost" 
