@@ -858,6 +858,87 @@ async function startServer() {
     }
   });
 
+  app.post("/api/workspaces/:workspaceId/invoices/:id/payments", requireAuthMiddleware(), async (req, res) => {
+    const { workspaceId, id } = req.params;
+    const { amount, date } = req.body;
+    try {
+      const amountNum = Number(amount);
+      if (isNaN(amountNum) || amountNum <= 0) {
+        return res.status(400).json({ error: "Invalid payment amount" });
+      }
+
+      const [existing] = await db.select().from(invoices).where(eq(invoices.id, id));
+      if (!existing) {
+        return res.status(404).json({ error: "Invoice not found" });
+      }
+
+      const paidSoFar = Number(existing.paidAmount || 0);
+      const invoiceTotal = Number(existing.amount || 0);
+      const newPaidAmount = paidSoFar + amountNum;
+      const isFullyPaid = newPaidAmount >= (invoiceTotal - 0.01);
+      const newStatus = isFullyPaid ? 'Paid' : (newPaidAmount > 0 ? 'Partial' : existing.status);
+
+      await db.update(invoices)
+        .set({
+          paidAmount: newPaidAmount,
+          status: newStatus,
+          updatedAt: new Date().toISOString()
+        })
+        .where(eq(invoices.id, id));
+
+      const txnId = crypto.randomUUID();
+      const transactionData = {
+        workspaceId,
+        type: 'Income' as const,
+        amount: amountNum,
+        currency: existing.currency,
+        category: 'Invoice Payment',
+        date: date || new Date().toISOString().split('T')[0],
+        time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
+        description: `Payment for Invoice #${id.slice(-6).toUpperCase()} - ${existing.clientName}`,
+        payeePayer: existing.clientName,
+        invoiceId: id,
+        accountId: req.body.accountId || '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        affects_cash: true,
+        affects_profit: true
+      };
+
+      await db.insert(transactions).values({ id: txnId, ...transactionData });
+
+      if (req.body.accountId === 'auto-allocate') {
+        const rules = await db.select().from(allocationRules).where(eq(allocationRules.workspaceId, workspaceId));
+        for (const rule of rules) {
+          const allocationAmount = (amountNum * rule.percentage) / 100;
+          const [acc] = await db.select().from(accounts).where(eq(accounts.id, rule.targetAccountId));
+          if (acc) {
+            await db.update(accounts)
+              .set({ balance: acc.balance + allocationAmount })
+              .where(eq(accounts.id, rule.targetAccountId));
+          }
+        }
+      } else if (req.body.accountId) {
+        const [acc] = await db.select().from(accounts).where(eq(accounts.id, req.body.accountId));
+        if (acc) {
+          await db.update(accounts)
+            .set({ balance: acc.balance + amountNum })
+            .where(eq(accounts.id, req.body.accountId));
+        }
+      }
+
+      await invalidateCache(buildCacheKey("ws", workspaceId, "invoices"));
+      await invalidateCache(buildCacheKey("ws", workspaceId, "transactions"));
+      await invalidateCache(buildCacheKey("ws", workspaceId, "accounts"));
+
+      const [updated] = await db.select().from(invoices).where(eq(invoices.id, id));
+      res.json({ ...updated, items: safeParse(updated.items) });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to record payment" });
+    }
+  });
+
   // --- CATALOG ITEMS ENDPOINTS ---
   app.get("/api/workspaces/:workspaceId/catalog-items", requireAuthMiddleware(), async (req, res) => {
     const { workspaceId } = req.params;
@@ -1122,32 +1203,26 @@ async function startServer() {
   // --- CMS CONFIG ENDPOINTS ---
   app.get("/api/cms-config", async (req, res) => {
     try {
-      const result = await withCache(
-        buildCacheKey("cms", "config"), 300,
-        async () => {
-          let [config] = await db.select().from(cmsConfigs).where(eq(cmsConfigs.id, "cms"));
-          if (!config) {
-            const defaultConfig = {
-              id: "cms",
-              siteName: "IzyFlow",
-              heroBadgeText: "IzyInvoice is now IzyFlow!",
-              heroHeading: "Track Your Money. Know Your Business",
-              heroSubtext: "Send invoices, track your money and understand your business clearly with built-in tools to help you price your work right.",
-              faqs: JSON.stringify([]),
-              services: JSON.stringify([]),
-              hideBrandName: false
-            };
-            const [inserted] = await db.insert(cmsConfigs).values(defaultConfig).returning();
-            config = inserted;
-          }
-          return {
-            ...config,
-            faqs: safeParse(config.faqs),
-            services: safeParse(config.services),
-          };
-        }
-      );
-      res.json(result);
+      let [config] = await db.select().from(cmsConfigs).where(eq(cmsConfigs.id, "cms"));
+      if (!config) {
+        const defaultConfig = {
+          id: "cms",
+          siteName: "IzyFlow",
+          heroBadgeText: "IzyInvoice is now IzyFlow!",
+          heroHeading: "Track Your Money. Know Your Business",
+          heroSubtext: "Send invoices, track your money and understand your business clearly with built-in tools to help you price your work right.",
+          faqs: JSON.stringify([]),
+          services: JSON.stringify([]),
+          hideBrandName: false
+        };
+        const [inserted] = await db.insert(cmsConfigs).values(defaultConfig).returning();
+        config = inserted;
+      }
+      res.json({
+        ...config,
+        faqs: safeParse(config.faqs),
+        services: safeParse(config.services),
+      });
     } catch (err) {
       console.error("Error fetching CMS config:", err);
       res.status(500).json({ error: "Failed to fetch CMS config" });

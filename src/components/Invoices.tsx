@@ -313,90 +313,42 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
       return;
     }
 
-    // Finalize payment logic with high precision
     const invoiceTotal = Number(editingInvoice.amount || 0);
     const paidSoFar = Number(editingInvoice.paidAmount || 0);
     const remainingToPayFull = Number((invoiceTotal - paidSoFar).toFixed(2));
 
     if (amountNum > remainingToPayFull + 0.05) {
       toast.error(`Amount exceeds remaining balance (${workspace.currency} ${remainingToPayFull.toLocaleString()})`);
-      setIsSubmitting(false);
       return;
     }
 
     setIsSubmitting(true);
-    
-    try {
-      const batch = writeBatch(db);
-      const isFinishing = (paidSoFar + amountNum) >= (invoiceTotal - 0.01);
-      
-      const invoiceRef = doc(db, `workspaces/${workspace.id}/invoices`, editingInvoice.id);
-      batch.update(invoiceRef, { 
-        paidAmount: increment(amountNum),
-        status: isFinishing ? 'Paid' : 'Partial',
-        updatedAt: new Date().toISOString()
-      });
 
-      // 2. Create Transaction
-      const transactionRef = doc(collection(db, `workspaces/${workspace.id}/transactions`));
+    try {
       const accounts = propAccounts;
       const rules = propRules;
       const defaultAccount = accounts.find(a => a.isDefault) || accounts[0];
-      
-      const transactionData = {
-        workspaceId: workspace.id,
-        type: 'Income' as TransactionType,
+
+      await api.recordPayment(workspace.id, editingInvoice.id, {
         amount: amountNum,
-        currency: workspace.currency,
-        category: 'Invoice Payment',
         date: paymentDate,
-        time: format(new Date(), 'HH:mm'),
-        description: `Payment for Invoice #${editingInvoice.id.slice(-6).toUpperCase()} - ${editingInvoice.clientName}`,
-        payeePayer: editingInvoice.clientName,
-        invoiceId: editingInvoice.id,
         accountId: rules.length > 0 ? 'auto-allocate' : (defaultAccount?.id || ''),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        affects_cash: true,
-        affects_profit: true
-      };
+      });
 
-      batch.set(transactionRef, transactionData);
-
-      // 3. Allocate Revenue using increment to prevent data races
-      if (rules.length > 0) {
-        rules.forEach(rule => {
-          const allocationAmount = Number(((amountNum * rule.percentage) / 100).toFixed(2));
-          const accountRef = doc(db, `workspaces/${workspace.id}/accounts`, rule.targetAccountId);
-          batch.update(accountRef, { 
-            balance: increment(allocationAmount),
-            updatedAt: new Date().toISOString()
-          });
-        });
-      } else if (defaultAccount) {
-        const accountRef = doc(db, `workspaces/${workspace.id}/accounts`, defaultAccount.id);
-        batch.update(accountRef, { 
-          balance: increment(amountNum),
-          updatedAt: new Date().toISOString()
-        });
-      }
-
-      await batch.commit();
-      
       toast.success('Payment Recorded Successfully', {
         description: `${workspace.currency} ${amountNum.toLocaleString()} applied to Invoice #${editingInvoice.id.slice(-6).toUpperCase()}`,
         className: 'bg-emerald-50 border-emerald-200 text-emerald-900',
       });
-      
+
       setIsRecordingPayment(false);
       setEditingInvoice(null);
       setPaymentAmount('');
       setPaymentDate(new Date().toISOString().split('T')[0]);
+      window.dispatchEvent(new CustomEvent('refresh-data'));
     } catch (error: any) {
       console.error('Record payment failed:', error);
-      const errInfo = handleFirestoreError(error, 'write', `workspaces/${workspace.id}/invoices/${editingInvoice.id}`);
       toast.error('Failed to record payment', {
-        description: error.message || 'Please check your connection and quota limits.',
+        description: error.message || 'Please check your connection.',
       });
     } finally {
       setIsSubmitting(false);
@@ -419,70 +371,23 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
     if (!workspace || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      const batch = writeBatch(db);
-      
-      // 1. Update Invoice Status
-      const invoiceRef = doc(db, `workspaces/${workspace.id}/invoices`, invoice.id);
-      const remainingToPay = Number((invoice.amount - (invoice.paidAmount || 0)).toFixed(2));
-      
-      batch.update(invoiceRef, { 
-        status: 'Paid',
-        paidAmount: invoice.amount,
-        updatedAt: new Date().toISOString()
-      });
-
-      // 2. Use passed dependencies
       const accounts = propAccounts;
       const rules = propRules;
       const defaultAccount = accounts.find(a => a.isDefault) || accounts[0];
+      const remainingToPay = Number((invoice.amount - (invoice.paidAmount || 0)).toFixed(2));
 
-      // 3. Create Income Transaction
-      const transactionRef = doc(collection(db, `workspaces/${workspace.id}/transactions`));
-      batch.set(transactionRef, {
-        workspaceId: workspace.id,
-        type: 'Income' as TransactionType,
+      await api.recordPayment(workspace.id, invoice.id, {
         amount: remainingToPay > 0 ? remainingToPay : 0,
-        currency: invoice.currency,
-        category: 'Invoice Payment',
         date: new Date().toISOString().split('T')[0],
-        time: format(new Date(), 'HH:mm'),
-        description: `Full payment for Invoice #${invoice.id.slice(-6).toUpperCase()} - ${invoice.clientName}`,
-        payeePayer: invoice.clientName,
-        invoiceId: invoice.id,
         accountId: rules.length > 0 ? 'auto-allocate' : (defaultAccount?.id || ''),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        affects_cash: true,
-        affects_profit: true
       });
 
-      // 4. Allocate using increment
-      if (remainingToPay > 0) {
-        if (rules.length > 0) {
-          rules.forEach(rule => {
-            const allocationAmount = Number(((remainingToPay * rule.percentage) / 100).toFixed(2));
-            const accountRef = doc(db, `workspaces/${workspace.id}/accounts`, rule.targetAccountId);
-            batch.update(accountRef, { 
-              balance: increment(allocationAmount),
-              updatedAt: new Date().toISOString()
-            });
-          });
-        } else if (defaultAccount) {
-          const accountRef = doc(db, `workspaces/${workspace.id}/accounts`, defaultAccount.id);
-          batch.update(accountRef, { 
-            balance: increment(remainingToPay),
-            updatedAt: new Date().toISOString()
-          });
-        }
-      }
-
-      await batch.commit();
       toast.success(`Invoice marked as paid. ${workspace.currency} ${remainingToPay.toLocaleString()} processed.`);
+      window.dispatchEvent(new CustomEvent('refresh-data'));
     } catch (error: any) {
       console.error('Mark as paid failed:', error);
-      handleFirestoreError(error, 'write', `workspaces/${workspace.id}/invoices/${invoice.id}`);
       toast.error('Failed to mark as paid', {
-        description: error.message || 'Please check your connection and quota limits.'
+        description: error.message || 'Please check your connection.'
       });
     } finally {
       setIsSubmitting(false);
@@ -492,12 +397,14 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
   const markAsSent = async (invoice: Invoice) => {
     if (!workspace) return;
     try {
-      await updateDoc(doc(db, `workspaces/${workspace.id}/invoices`, invoice.id), {
+      await api.updateInvoice(workspace.id, invoice.id, {
         status: 'Sent',
         updatedAt: new Date().toISOString()
       });
       toast.success('Invoice marked as sent');
+      window.dispatchEvent(new CustomEvent('refresh-data'));
     } catch (error) {
+      console.error('Mark as sent failed:', error);
       toast.error('Failed to update status');
     }
   };
@@ -552,74 +459,59 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
     }
   };
 
-  const handleExport = async (formatType: 'csv' | 'excel' | 'pdf') => {
+  const handleExport = (formatType: 'csv' | 'excel' | 'pdf') => {
     if (!workspace) return;
     
-    const loadingToast = toast.loading(`Preparing full database export (${formatType.toUpperCase()})...`);
+    const allInvoices = invoices;
     
-    try {
-      const q = query(
-        collection(db, `workspaces/${workspace.id}/invoices`),
-        orderBy('createdAt', 'desc')
-      );
-      const snapshot = await getDocs(q);
-      const allInvoices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Invoice));
+    const dataToExport = allInvoices.filter(invoice => {
+      const matchesSearch = !searchQuery || invoice.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                           invoice.amount.toString().includes(searchQuery);
       
-      const dataToExport = allInvoices.filter(invoice => {
-        const matchesSearch = invoice.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                             invoice.amount.toString().includes(searchQuery);
-        
-        if (!matchesSearch) return false;
-        
-        if (activeTab === 'all') return true;
-        if (activeTab === 'paid') return invoice.status === 'Paid';
-        if (activeTab === 'pending') return invoice.status === 'Sent' || invoice.status === 'Partial' || invoice.status === 'Draft';
-        if (activeTab === 'overdue') {
-          try {
-            return (invoice.status === 'Sent' || invoice.status === 'Partial' || invoice.status === 'Draft') && parseISO(invoice.dueDate) < new Date();
-          } catch (e) {
-            return false;
-          }
+      if (!matchesSearch) return false;
+      
+      if (activeTab === 'all') return true;
+      if (activeTab === 'paid') return invoice.status === 'Paid';
+      if (activeTab === 'pending') return invoice.status === 'Sent' || invoice.status === 'Partial' || invoice.status === 'Draft';
+      if (activeTab === 'overdue') {
+        try {
+          return (invoice.status === 'Sent' || invoice.status === 'Partial' || invoice.status === 'Draft') && parseISO(invoice.dueDate) < new Date();
+        } catch (e) {
+          return false;
         }
-        return true;
-      });
-
-      if (dataToExport.length === 0) {
-        toast.dismiss(loadingToast);
-        toast.error('No data to export with current filters');
-        return;
       }
+      return true;
+    });
 
-      const formattedData = dataToExport.map(i => {
-        let dueDateStr = 'N/A';
-        try { if (i.dueDate) dueDateStr = format(parseISO(i.dueDate), 'MMM d, yyyy'); } catch (e) {}
-
-        let createdAtStr = 'N/A';
-        try { createdAtStr = format(parseISO(i.createdAt), 'MMM d, yyyy'); } catch (e) {}
-
-        return {
-          'Client': i.clientName,
-          'Amount': i.amount,
-          'Currency': i.currency,
-          'Status': i.status,
-          'Due Date': dueDateStr,
-          'Created At': createdAtStr
-        };
-      });
-
-      const filename = `invoices_full_export_${format(new Date(), 'yyyy-MM-dd')}`;
-
-      if (formatType === 'csv') exportToCSV(formattedData, filename);
-      else if (formatType === 'excel') exportToExcel(formattedData, filename);
-      else exportToPDF(formattedData, filename, 'Invoices Full Report');
-      
-      toast.dismiss(loadingToast);
-      toast.success(`Export of ${formattedData.length} records completed`);
-    } catch (error) {
-      console.error('Export failed:', error);
-      toast.dismiss(loadingToast);
-      toast.error('Failed to retrieve full history. Please check your connection.');
+    if (dataToExport.length === 0) {
+      toast.error('No data to export with current filters');
+      return;
     }
+
+    const formattedData = dataToExport.map(i => {
+      let dueDateStr = 'N/A';
+      try { if (i.dueDate) dueDateStr = format(parseISO(i.dueDate), 'MMM d, yyyy'); } catch (e) {}
+
+      let createdAtStr = 'N/A';
+      try { createdAtStr = format(parseISO(i.createdAt), 'MMM d, yyyy'); } catch (e) {}
+
+      return {
+        'Client': i.clientName,
+        'Amount': i.amount,
+        'Currency': i.currency,
+        'Status': i.status,
+        'Due Date': dueDateStr,
+        'Created At': createdAtStr
+      };
+    });
+
+    const filename = `invoices_full_export_${format(new Date(), 'yyyy-MM-dd')}`;
+
+    if (formatType === 'csv') exportToCSV(formattedData, filename);
+    else if (formatType === 'excel') exportToExcel(formattedData, filename);
+    else exportToPDF(formattedData, filename, 'Invoices Full Report');
+    
+    toast.success(`Export of ${dataToExport.length} records completed`);
   };
 
   if (!workspace) return null;
