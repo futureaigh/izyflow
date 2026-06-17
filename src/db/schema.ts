@@ -88,6 +88,7 @@ export const invoices = sqliteTable("invoices", {
   clientBusinessName: text("client_business_name").notNull(),
   clientEmail: text("client_email"),
   clientPhone: text("client_phone"),
+  title: text("title"),
   introduction: text("introduction"),
   amount: real("amount").notNull(),
   currency: text("currency").notNull(),

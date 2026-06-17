@@ -17,6 +17,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { Catalog } from './Catalog';
 import { CatalogItem } from '../types';
+import { api } from '../lib/api';
 
 interface InvoicesProps {
   workspace: Workspace | null;
@@ -60,6 +61,7 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
   const [clientBusinessName, setClientBusinessName] = useState('');
   const [clientEmail, setClientEmail] = useState('');
   const [clientPhone, setClientPhone] = useState('');
+  const [title, setTitle] = useState('');
   const [introduction, setIntroduction] = useState('');
   const [items, setItems] = useState<InvoiceItem[]>([{ name: '', description: '', quantity: 1, price: 0 }]);
   const [dueDate, setDueDate] = useState('');
@@ -206,6 +208,7 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
         clientBusinessName: clientBusinessName.trim(),
         clientEmail: clientEmail.trim(),
         clientPhone: clientPhone.trim(),
+        title: title.trim(),
         introduction: introduction.trim(),
         amount: calculateTotal(),
         subtotal: subtotalVal,
@@ -216,15 +219,16 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
         items,
         notes: notes.trim(),
         updatedAt: new Date().toISOString(),
-        description: items.map(i => i.name).join(', ')
       };
 
       if (editingInvoice) {
-        await updateDoc(doc(db, `workspaces/${workspace.id}/invoices`, editingInvoice.id), invoiceData);
+        await api.updateInvoice(workspace.id, editingInvoice.id, invoiceData);
         toast.success('Invoice updated');
       } else {
-        await addDoc(collection(db, `workspaces/${workspace.id}/invoices`), {
+        const id = crypto.randomUUID();
+        await api.createInvoice(workspace.id, {
           ...invoiceData,
+          id,
           workspaceId: workspace.id,
           currency: workspace.currency,
           status: 'Draft',
@@ -236,21 +240,48 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
       setIsCreating(false);
       setIsEditing(false);
       setEditingInvoice(null);
-      setClientName('');
-      setClientBusinessName('');
-      setClientEmail('');
-      setClientPhone('');
-      setIntroduction('');
-      setItems([{ name: '', description: '', quantity: 1, price: 0 }]);
-      setDueDate('');
-      setPaymentTerms('Due on Receipt');
-      setDiscountType('percentage');
-      setDiscountValue('');
-      setNotes('');
+      resetForm();
+      window.dispatchEvent(new CustomEvent('refresh-data'));
     } catch (error) {
       console.error('Invoice error:', error);
       toast.error(editingInvoice ? 'Failed to update invoice' : 'Failed to create invoice');
     }
+  };
+
+  const resetForm = () => {
+    setClientName('');
+    setClientBusinessName('');
+    setClientEmail('');
+    setClientPhone('');
+    setTitle('');
+    setIntroduction('');
+    setItems([{ name: '', description: '', quantity: 1, price: 0 }]);
+    setDueDate('');
+    setPaymentTerms('Due on Receipt');
+    setDiscountType('percentage');
+    setDiscountValue('');
+    setNotes('');
+  };
+
+  const startCopy = (invoice: Invoice) => {
+    setEditingInvoice(null);
+    setClientName(invoice.clientName);
+    setClientBusinessName(invoice.clientBusinessName || '');
+    setClientEmail(invoice.clientEmail || '');
+    setClientPhone(invoice.clientPhone || '');
+    setTitle(invoice.title || '');
+    setIntroduction(invoice.introduction || '');
+    setItems(invoice.items.map(i => ({ ...i })));
+    setPaymentTerms(invoice.paymentTerms || 'Due on Receipt');
+    setDiscountType(invoice.discountType || 'percentage');
+    setDiscountValue(invoice.discountValue !== undefined && invoice.discountValue > 0 ? invoice.discountValue.toString() : '');
+    setNotes(invoice.notes || '');
+    try {
+      setDueDate(invoice.dueDate ? format(parseISO(invoice.dueDate), 'yyyy-MM-dd') : '');
+    } catch (e) {
+      setDueDate('');
+    }
+    setIsCreating(true);
   };
 
   const startEditing = (invoice: Invoice) => {
@@ -259,6 +290,7 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
     setClientBusinessName(invoice.clientBusinessName || '');
     setClientEmail(invoice.clientEmail || '');
     setClientPhone(invoice.clientPhone || '');
+    setTitle(invoice.title || '');
     setIntroduction(invoice.introduction || '');
     setItems(invoice.items);
     setPaymentTerms(invoice.paymentTerms || 'Due on Receipt');
@@ -504,52 +536,16 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
   const deleteInvoice = async (id: string) => {
     if (!workspace) return;
     
-    const loadingToast = toast.loading('Deleting invoice and related transactions...');
+    const loadingToast = toast.loading('Deleting invoice...');
     
     try {
-      const batch = writeBatch(db);
-      
-      // 1. Find all transactions related to this invoice
-      const transactionsQuery = query(
-        collection(db, `workspaces/${workspace.id}/transactions`),
-        where('invoiceId', '==', id)
-      );
-      const transactionDocs = await getDocs(transactionsQuery);
-      
-      // 2. Add transaction deletions and balance reversals to batch
-      transactionDocs.forEach(tDoc => {
-        const tData = tDoc.data() as Transaction;
-        batch.delete(tDoc.ref);
-        
-        // Reverse account balances
-        if (tData.accountId === 'auto-allocate') {
-          // If it was auto-allocated, we try to reverse based on current rules as best effort
-          // (Usually transactions have rules stored or accountId reflects real account)
-          propRules.forEach(rule => {
-            const allocationAmount = Number(((tData.amount * rule.percentage) / 100).toFixed(2));
-            const accountRef = doc(db, `workspaces/${workspace.id}/accounts`, rule.targetAccountId);
-            batch.update(accountRef, { balance: increment(-allocationAmount) });
-          });
-        } else if (tData.accountId) {
-          const accountRef = doc(db, `workspaces/${workspace.id}/accounts`, tData.accountId);
-          const isOutflow = tData.type === 'Expense' || tData.type === 'Investment';
-          const isInflow = tData.type === 'Income';
-          const balanceChange = isInflow ? tData.amount : isOutflow ? -tData.amount : 0;
-          batch.update(accountRef, { balance: increment(-balanceChange) });
-        }
-      });
-      
-      // 3. Delete the invoice itself
-      batch.delete(doc(db, `workspaces/${workspace.id}/invoices`, id));
-      
-      await batch.commit();
-      
+      await api.deleteInvoice(workspace.id, id);
       toast.dismiss(loadingToast);
-      toast.success('Invoice and all related payments deleted successfully');
+      toast.success('Invoice deleted successfully');
+      window.dispatchEvent(new CustomEvent('refresh-data'));
     } catch (error: any) {
       console.error('Delete invoice failed:', error);
       toast.dismiss(loadingToast);
-      const errInfo = handleFirestoreError(error, 'delete', `workspaces/${workspace.id}/invoices/${id}`);
       toast.error('Failed to delete invoice', {
         description: error.message || 'Please check your connection and permissions.'
       });
@@ -736,17 +732,7 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
               setIsCreating(false);
               setIsEditing(false);
               setEditingInvoice(null);
-              setClientName('');
-              setClientBusinessName('');
-              setClientEmail('');
-              setClientPhone('');
-              setIntroduction('');
-              setItems([{ name: '', description: '', quantity: 1, price: 0 }]);
-              setDueDate('');
-              setPaymentTerms('Due on Receipt');
-              setDiscountType('percentage');
-              setDiscountValue('');
-              setNotes('');
+              resetForm();
             }
           }}>
             <DialogTrigger
@@ -874,6 +860,15 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
                       <option value="COD">COD (Cash on Delivery)</option>
                     </select>
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Invoice Title</Label>
+                  <Input 
+                    placeholder="e.g. Website Design Project - Phase 1" 
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="h-12 rounded-xl border-border bg-background"
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Invoice Introduction / Description</Label>
@@ -1006,6 +1001,7 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
                   setIsCreating(false);
                   setIsEditing(false);
                   setEditingInvoice(null);
+                  resetForm();
                 }} className="rounded-xl h-12 px-6">Cancel</Button>
                 <Button onClick={createInvoice} className="rounded-xl h-12 px-8 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/20 font-bold">
                   {isEditing ? 'Update Invoice' : 'Create Invoice'}
@@ -1060,6 +1056,11 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
                     </div>
                   </div>
 
+                  {editingInvoice.title && (
+                    <div className="pt-4 pb-0">
+                      <h3 className="text-lg font-black text-foreground">{editingInvoice.title}</h3>
+                    </div>
+                  )}
                   {editingInvoice.introduction && (
                     <div className="pt-4 pb-2">
                       <p className="text-sm text-foreground/80 leading-relaxed">{editingInvoice.introduction}</p>
@@ -1366,6 +1367,7 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
 
                     <div className="min-w-0">
                       <h3 className="font-black text-xl text-foreground truncate leading-tight">{invoice.clientName}</h3>
+                      {invoice.title && <p className="text-xs font-bold text-muted-foreground truncate mt-1">{invoice.title}</p>}
                       <div className="flex flex-wrap items-center gap-2 mt-2">
                         <Badge variant="secondary" className="text-[10px] font-bold uppercase tracking-wider bg-muted/50">
                           Due: {(() => {
@@ -1446,6 +1448,15 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
                           </Button>
                         </>
                       )}
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        onClick={() => startCopy(invoice)}
+                        className="h-9 w-9 text-amber-600 hover:bg-amber-50/50 rounded-xl"
+                        title="Copy Invoice"
+                      >
+                        <FileText className="h-4 w-4" />
+                      </Button>
                       <Button 
                         size="icon" 
                         variant="ghost" 

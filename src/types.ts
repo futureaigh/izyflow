@@ -145,6 +145,7 @@ export interface Invoice {
   clientBusinessName: string;
   clientEmail?: string;
   clientPhone?: string;
+  title?: string;
   introduction?: string;
   amount: number;
   currency: Currency;
