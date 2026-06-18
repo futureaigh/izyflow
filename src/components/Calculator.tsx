@@ -39,6 +39,7 @@ import {
   LayoutGrid,
   Percent
 } from 'lucide-react';
+import { api } from '../lib/api';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
@@ -176,20 +177,14 @@ export function Calculator({ workspace }: CalculatorProps) {
     return () => clearTimeout(timer);
   }, [inputs, clientName, workspace?.ownerId]);
 
-  // Load saved calculations from Firestore
+  // Load saved calculations from API
   useEffect(() => {
     if (!workspace) return;
-
-    const q = query(
-      collection(db, `workspaces/${workspace.id}/pricingCalculations`),
-      orderBy('createdAt', 'desc')
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setSavedCalculations(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PricingCalculation)));
-    }, (error) => handleFirestoreError(error, 'list', 'pricingCalculations'));
-
-    return () => unsubscribe();
+    let cancelled = false;
+    api.getPricingCalculations(workspace.id).then((data) => {
+      if (!cancelled) setSavedCalculations(data || []);
+    }).catch(() => {});
+    return () => { cancelled = true; };
   }, [workspace]);
 
   // Calculation Logic
@@ -350,7 +345,8 @@ export function Calculator({ workspace }: CalculatorProps) {
     }
     setIsSaving(true);
     try {
-      await addDoc(collection(db, `workspaces/${workspace.id}/pricingCalculations`), {
+      await api.createPricingCalculation(workspace.id, {
+        id: crypto.randomUUID(),
         workspaceId: workspace.id,
         clientName,
         pricingType: inputs.pricingType,
@@ -358,6 +354,9 @@ export function Calculator({ workspace }: CalculatorProps) {
         totalPrice: results.finalPrice,
         createdAt: new Date().toISOString()
       });
+      // Refresh list
+      const data = await api.getPricingCalculations(workspace.id);
+      setSavedCalculations(data || []);
       toast.success('Calculation saved to history!');
     } catch (error) {
       toast.error('Failed to save calculation');
@@ -369,7 +368,8 @@ export function Calculator({ workspace }: CalculatorProps) {
   const deleteCalculation = async (id: string) => {
     if (!workspace) return;
     try {
-      await deleteDoc(doc(db, `workspaces/${workspace.id}/pricingCalculations`, id));
+      await api.deletePricingCalculation(workspace.id, id);
+      setSavedCalculations(prev => prev.filter(c => c.id !== id));
       toast.success('Calculation removed');
     } catch (error) {
       toast.error('Failed to delete calculation');
@@ -385,13 +385,16 @@ export function Calculator({ workspace }: CalculatorProps) {
       const dueDate = new Date();
       dueDate.setDate(dueDate.getDate() + 14);
 
-      await addDoc(collection(db, `workspaces/${workspace.id}/invoices`), {
+      await api.createInvoice(workspace.id, {
+        id: crypto.randomUUID(),
         workspaceId: workspace.id,
         clientName,
         amount: results.finalPrice,
+        subtotal: results.finalPrice,
         currency: workspace.currency,
         status: 'Draft',
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         dueDate: dueDate.toISOString(),
         items: [
           { 
@@ -413,7 +416,8 @@ export function Calculator({ workspace }: CalculatorProps) {
   const saveToCatalog = async () => {
     if (!workspace) return;
     try {
-      await addDoc(collection(db, `workspaces/${workspace.id}/catalogItems`), {
+      await api.createCatalogItem(workspace.id, {
+        id: crypto.randomUUID(),
         workspaceId: workspace.id,
         name: clientName || `${inputs.pricingType} Solution`,
         description: `Generated from pricing calculator (${inputs.pricingType})`,
