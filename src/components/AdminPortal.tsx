@@ -47,24 +47,14 @@ export function AdminPortal({ user, initialConfig, isConfigLoading }: AdminPorta
   const fetchAnalyticsAndUsers = async () => {
     setAnalyticsLoading(true);
     try {
-      const [visitsSnap, usersSnap, errorsSnap, queriesSnap] = await Promise.all([
-        getDocs(query(collection(db, 'analytics'), where('type', '==', 'visit'), orderBy('timestamp', 'desc'), limit(100))),
-        getDocs(collection(db, 'users')),
-        getDocs(query(collection(db, 'izy_errors'), orderBy('timestamp', 'desc'), limit(50))),
-        getDocs(query(collection(db, 'analytics'), where('type', '==', 'izy_query'), orderBy('timestamp', 'desc'), limit(100)))
-      ]);
-
-      setVisits(visitsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Visit)));
-      setAllUsers(usersSnap.docs.map(d => ({ uid: d.id, ...d.data() } as any)));
-      setIzyErrors(errorsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setIzyQueries(queriesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const data = await api.adminGetStats();
+      setVisits(data.visits || []);
+      setAllUsers(data.users || []);
+      setIzyErrors(data.errors || []);
+      setIzyQueries(data.queries || []);
     } catch (error: any) {
       console.error('Admin fetch failed:', error);
-      if (error.code === 'resource-exhausted' || error.message.includes('Quota limit exceeded')) {
-        toast.error('Daily database limit reached. Analytics currently unavailable.');
-      } else {
-        toast.error('Failed to fetch data');
-      }
+      toast.error('Failed to fetch admin data');
     } finally {
       setAnalyticsLoading(false);
     }
@@ -72,7 +62,7 @@ export function AdminPortal({ user, initialConfig, isConfigLoading }: AdminPorta
 
   const updateUserRole = async (uid: string, role: UserRole) => {
     try {
-      await updateDoc(doc(db, 'users', uid), { role });
+      await api.adminUpdateUserRole(uid, role);
       setAllUsers(prev => prev.map(u => u.uid === uid ? { ...u, role } : u));
       toast.success('User role updated');
     } catch (error) {

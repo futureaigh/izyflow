@@ -207,3 +207,21 @@ export const cmsConfigs = sqliteTable("cms_configs", {
   siteName: text("site_name"),
   faviconUrl: text("favicon_url"),
 });
+
+export const analytics = sqliteTable("analytics", {
+  id: text("id").primaryKey(),
+  type: text("type").notNull(), // 'visit' | 'izy_query'
+  userId: text("user_id"),
+  path: text("path"),
+  userAgent: text("user_agent"),
+  query: text("query"),
+  timestamp: text("timestamp").notNull(),
+});
+
+export const appErrors = sqliteTable("app_errors", {
+  id: text("id").primaryKey(),
+  error: text("error").notNull(),
+  query: text("query"),
+  userId: text("user_id"),
+  timestamp: text("timestamp").notNull(),
+});
