@@ -128,6 +128,16 @@ function hexToRgb(hex: string): [number, number, number] {
   return [r, g, b];
 }
 
+// Sanitize strings for jsPDF — replace em dashes and other non-latin1 chars
+function cleanForPDF(str: string): string {
+  return str
+    .replace(/\u2014/g, ' - ')   // em dash
+    .replace(/\u2013/g, ' - ')   // en dash
+    .replace(/\u2018|\u2019/g, "'") // smart quotes
+    .replace(/\u201c|\u201d/g, '"') // smart double quotes
+    .replace(/[^\x00-\xFF]/g, '');  // strip remaining non-latin1
+}
+
 export async function generateInvoicePDF(invoice: Invoice, workspace: Workspace) {
   const doc = new jsPDF();
   const margin = 14;
@@ -135,31 +145,30 @@ export async function generateInvoicePDF(invoice: Invoice, workspace: Workspace)
   const brandColorRgb = hexToRgb(workspace.brandColor || '#2563eb');
 
   // Header & Logo
-  const logoUrl = workspace.logoUrl || 'https://picsum.photos/seed/izyflow/200/200';
-  const logoData = await loadImage(logoUrl);
+  const logoData = workspace.logoUrl ? await loadImage(workspace.logoUrl) : null;
   
   if (logoData) {
     doc.addImage(logoData, 'PNG', margin, y - 10, 25, 25);
     doc.setFontSize(20);
     doc.setTextColor(30, 41, 59); // Slate-800
     doc.setFont('helvetica', 'bold');
-    doc.text(workspace.name, margin + 30, y + 5);
+    doc.text(cleanForPDF(workspace.name), margin + 30, y + 5);
     y += 25;
   } else {
     doc.setFontSize(24);
     doc.setTextColor(brandColorRgb[0], brandColorRgb[1], brandColorRgb[2]);
     doc.setFont('helvetica', 'bold');
-    doc.text(workspace.name, margin, y);
+    doc.text(cleanForPDF(workspace.name), margin, y);
     y += 15;
   }
   
   doc.setFontSize(9);
   doc.setTextColor(100);
   doc.setFont('helvetica', 'normal');
-  if (workspace.businessAddress) { doc.text(workspace.businessAddress, margin, y); y += 5; }
-  if (workspace.businessEmail) { doc.text(workspace.businessEmail, margin, y); y += 5; }
-  if (workspace.businessPhone) { doc.text(workspace.businessPhone, margin, y); y += 5; }
-  if (workspace.taxId) { doc.text(`Tax ID: ${workspace.taxId}`, margin, y); y += 5; }
+  if (workspace.businessAddress) { doc.text(cleanForPDF(workspace.businessAddress), margin, y); y += 5; }
+  if (workspace.businessEmail) { doc.text(cleanForPDF(workspace.businessEmail), margin, y); y += 5; }
+  if (workspace.businessPhone) { doc.text(cleanForPDF(workspace.businessPhone), margin, y); y += 5; }
+  if (workspace.taxId) { doc.text(`Tax ID: ${cleanForPDF(workspace.taxId)}`, margin, y); y += 5; }
 
   y += 5;
   doc.setDrawColor(226, 232, 240); // Slate-200
@@ -203,19 +212,19 @@ export async function generateInvoicePDF(invoice: Invoice, workspace: Workspace)
   doc.setFontSize(10);
   doc.setTextColor(30, 41, 59);
   doc.setFont('helvetica', 'normal');
-  doc.text(invoice.clientBusinessName || invoice.clientName, margin, y);
+  doc.text(cleanForPDF(invoice.clientBusinessName || invoice.clientName), margin, y);
   
   if (invoice.clientBusinessName) {
     y += 5;
-    doc.text(`Attn: ${invoice.clientName}`, margin, y);
+    doc.text(`Attn: ${cleanForPDF(invoice.clientName)}`, margin, y);
   }
   if (invoice.clientEmail) {
     y += 5;
-    doc.text(invoice.clientEmail, margin, y);
+    doc.text(cleanForPDF(invoice.clientEmail), margin, y);
   }
   if (invoice.clientPhone) {
     y += 5;
-    doc.text(invoice.clientPhone, margin, y);
+    doc.text(cleanForPDF(invoice.clientPhone), margin, y);
   }
   
   y += 15;
@@ -223,7 +232,7 @@ export async function generateInvoicePDF(invoice: Invoice, workspace: Workspace)
   if (invoice.introduction) {
     doc.setFontSize(10);
     doc.setTextColor(71, 85, 105);
-    const splitIntro = doc.splitTextToSize(invoice.introduction, 180);
+    const splitIntro = doc.splitTextToSize(cleanForPDF(invoice.introduction), 180);
     doc.text(splitIntro, margin, y);
     y += (splitIntro.length * 5) + 10;
   }
@@ -342,7 +351,7 @@ export async function generateInvoicePDF(invoice: Invoice, workspace: Workspace)
     doc.setFontSize(9);
     doc.setTextColor(100);
     doc.setFont('helvetica', 'normal');
-    const splitNotes = doc.splitTextToSize(invoice.notes, 180);
+    const splitNotes = doc.splitTextToSize(cleanForPDF(invoice.notes), 180);
     doc.text(splitNotes, margin, y);
     y += (splitNotes.length * 5) + 5;
   }
@@ -428,7 +437,8 @@ export async function generateInvoicePDF(invoice: Invoice, workspace: Workspace)
   doc.setFont('helvetica', 'italic');
   doc.text('Thank you for your business!', 105, y, { align: 'center' });
 
-  doc.save(`invoice_${invoice.id.slice(-6)}.pdf`);
+  const safeClient = invoice.clientName.replace(/[^a-z0-9]/gi, '_').slice(0, 30);
+  doc.save(`Invoice_${invoice.id.slice(-6).toUpperCase()}_${safeClient}.pdf`);
 }
 
 export async function generateReceiptPDF(invoice: Invoice, workspace: Workspace) {
@@ -438,8 +448,7 @@ export async function generateReceiptPDF(invoice: Invoice, workspace: Workspace)
   const brandColorRgb = hexToRgb(workspace.brandColor || '#10b981'); // Default Emerald for receipts
 
   // --- HEADER SECTION ---
-  const logoUrl = workspace.logoUrl || 'https://picsum.photos/seed/izyflow/200/200';
-  const logoData = await loadImage(logoUrl);
+  const logoData = workspace.logoUrl ? await loadImage(workspace.logoUrl) : null;
   
   if (logoData) {
     doc.addImage(logoData, 'PNG', 160, y - 10, 25, 25);
@@ -454,13 +463,13 @@ export async function generateReceiptPDF(invoice: Invoice, workspace: Workspace)
   doc.setFontSize(10);
   doc.setTextColor(71, 85, 105); // Slate-600
   doc.setFont('helvetica', 'bold');
-  doc.text(workspace.name, margin, y);
+  doc.text(cleanForPDF(workspace.name), margin, y);
   
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100);
   y += 5;
-  if (workspace.businessAddress) { doc.text(workspace.businessAddress, margin, y); y += 5; }
-  if (workspace.businessEmail) { doc.text(workspace.businessEmail, margin, y); y += 5; }
+  if (workspace.businessAddress) { doc.text(cleanForPDF(workspace.businessAddress), margin, y); y += 5; }
+  if (workspace.businessEmail) { doc.text(cleanForPDF(workspace.businessEmail), margin, y); y += 5; }
   
   y += 10;
   doc.setDrawColor(226, 232, 240); // Slate-200
@@ -646,8 +655,7 @@ export async function generateStaffReceiptPDF(receipt: StaffReceipt, workspace: 
   const brandColorRgb = hexToRgb(workspace.brandColor || '#4f46e5'); // Default Indigo for staff receipts
 
   // --- HEADER SECTION ---
-  const logoUrl = workspace.logoUrl || 'https://picsum.photos/seed/izyflow/200/200';
-  const logoData = await loadImage(logoUrl);
+  const logoData = workspace.logoUrl ? await loadImage(workspace.logoUrl) : null;
   
   if (logoData) {
     doc.addImage(logoData, 'PNG', 160, y - 10, 25, 25);
@@ -662,13 +670,13 @@ export async function generateStaffReceiptPDF(receipt: StaffReceipt, workspace: 
   doc.setFontSize(10);
   doc.setTextColor(71, 85, 105); // Slate-600
   doc.setFont('helvetica', 'bold');
-  doc.text(workspace.name, margin, y);
+  doc.text(cleanForPDF(workspace.name), margin, y);
   
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100);
   y += 5;
-  if (workspace.businessAddress) { doc.text(workspace.businessAddress, margin, y); y += 5; }
-  if (workspace.businessEmail) { doc.text(workspace.businessEmail, margin, y); y += 5; }
+  if (workspace.businessAddress) { doc.text(cleanForPDF(workspace.businessAddress), margin, y); y += 5; }
+  if (workspace.businessEmail) { doc.text(cleanForPDF(workspace.businessEmail), margin, y); y += 5; }
   
   y += 10;
   doc.setDrawColor(226, 232, 240); // Slate-200
