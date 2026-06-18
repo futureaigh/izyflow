@@ -200,7 +200,7 @@ export function Sidebar({
             <LogOut className="h-4 w-4" />
             <span className="text-xs font-bold">Sign Out</span>
           </Button>
-          {user.email === 'palmersarkodee@gmail.com' && (
+          {user.role === 'Admin' && (
             <Button 
               variant="ghost" 
               size="sm"
