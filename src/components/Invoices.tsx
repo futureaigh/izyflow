@@ -263,25 +263,43 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
     setNotes('');
   };
 
-  const startCopy = (invoice: Invoice) => {
-    setEditingInvoice(null);
-    setClientName(invoice.clientName);
-    setClientBusinessName(invoice.clientBusinessName || '');
-    setClientEmail(invoice.clientEmail || '');
-    setClientPhone(invoice.clientPhone || '');
-    setTitle(invoice.title || '');
-    setIntroduction(invoice.introduction || '');
-    setItems(invoice.items.map(i => ({ ...i })));
-    setPaymentTerms(invoice.paymentTerms || 'Due on Receipt');
-    setDiscountType(invoice.discountType || 'percentage');
-    setDiscountValue(invoice.discountValue !== undefined && invoice.discountValue > 0 ? invoice.discountValue.toString() : '');
-    setNotes(invoice.notes || '');
+  const copyInvoice = async (invoice: Invoice) => {
+    if (!workspace) return;
+    const loadingToast = toast.loading('Creating a copy of the invoice...');
     try {
-      setDueDate(invoice.dueDate ? format(parseISO(invoice.dueDate), 'yyyy-MM-dd') : '');
-    } catch (e) {
-      setDueDate('');
+      const id = crypto.randomUUID();
+      await api.createInvoice(workspace.id, {
+        clientName: invoice.clientName,
+        clientBusinessName: invoice.clientBusinessName || '',
+        clientEmail: invoice.clientEmail || '',
+        clientPhone: invoice.clientPhone || '',
+        title: invoice.title || '',
+        introduction: invoice.introduction || '',
+        amount: invoice.amount,
+        subtotal: invoice.subtotal || invoice.amount,
+        paymentTerms: invoice.paymentTerms || 'Due on Receipt',
+        discountType: invoice.discountType || 'percentage',
+        discountValue: invoice.discountValue || 0,
+        dueDate: invoice.dueDate || '',
+        items: invoice.items || [],
+        notes: invoice.notes || '',
+        id,
+        workspaceId: workspace.id,
+        currency: workspace.currency,
+        status: 'Draft',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        paidAmount: 0,
+      });
+      toast.dismiss(loadingToast);
+      toast.success('Invoice copied successfully!', {
+        description: `Created a new draft invoice for ${invoice.clientName}`,
+      });
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      console.error('Failed to copy invoice:', error);
+      toast.error('Failed to copy invoice');
     }
-    setIsCreating(true);
   };
 
   const startEditing = (invoice: Invoice) => {
@@ -1363,7 +1381,7 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
                       <Button 
                         size="icon" 
                         variant="ghost" 
-                        onClick={() => startCopy(invoice)}
+                        onClick={() => copyInvoice(invoice)}
                         className="h-9 w-9 text-indigo-600 hover:bg-indigo-50/50 rounded-xl"
                         title="Make Copy"
                       >
