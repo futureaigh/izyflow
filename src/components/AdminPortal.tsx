@@ -17,6 +17,7 @@ interface AdminPortalProps {
   user: UserProfile | null;
   initialConfig: CMSConfig | null;
   isConfigLoading: boolean;
+  onConfigUpdate?: (config: CMSConfig) => void;
 }
 
 export function AdminPortal({ user, initialConfig, isConfigLoading }: AdminPortalProps) {
@@ -153,7 +154,8 @@ export function AdminPortal({ user, initialConfig, isConfigLoading }: AdminPorta
     setSaving(true);
     console.log('Saving CMS Config:', config);
     try {
-      await api.updateCMSConfig(config);
+      const updated = await api.updateCMSConfig(config);
+      onConfigUpdate?.(updated);
       toast.success('Configuration saved successfully');
     } catch (error) {
       console.error('Save Error Details:', error);

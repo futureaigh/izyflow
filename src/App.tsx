@@ -411,7 +411,8 @@ export default function App({ auth }: AppProps) {
         link.rel = 'icon';
         document.getElementsByTagName('head')[0].appendChild(link);
       }
-      link.href = cmsConfig.faviconUrl;
+      const sep = cmsConfig.faviconUrl.includes('?') ? '&' : '?';
+      link.href = `${cmsConfig.faviconUrl}${sep}_t=${Date.now()}`;
     }
   }, [cmsConfig]);
 
@@ -553,7 +554,7 @@ export default function App({ auth }: AppProps) {
     } else {
       return (
         <>
-          <AdminPortal user={user} initialConfig={cmsConfig} isConfigLoading={isConfigLoading} />
+          <AdminPortal user={user} initialConfig={cmsConfig} isConfigLoading={isConfigLoading} onConfigUpdate={setCmsConfig} />
           <Toaster position="top-right" />
         </>
       );
