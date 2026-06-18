@@ -1243,8 +1243,13 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
                 <CardContent className="flex flex-col p-6 h-full justify-between gap-6">
                   <div className="space-y-4">
                     <div className="flex items-start justify-between">
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-muted text-muted-foreground group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
-                        <FileText className="h-6 w-6" />
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-muted text-muted-foreground group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
+                          <FileText className="h-6 w-6" />
+                        </div>
+                        <span className="text-xs font-mono font-bold text-muted-foreground tracking-normal bg-muted/40 px-2 py-1 rounded-lg">
+                          INV-{invoice.id.slice(-6).toUpperCase()}
+                        </span>
                       </div>
                         <Badge 
                           variant="outline" 
@@ -1259,8 +1264,16 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
 
                     <div className="min-w-0">
                       <h3 className="font-black text-xl text-foreground truncate leading-tight">{invoice.clientName}</h3>
-                      {invoice.title && <p className="text-xs font-bold text-muted-foreground truncate mt-1">{invoice.title}</p>}
-                      <div className="flex flex-wrap items-center gap-2 mt-2">
+                      {invoice.introduction ? (
+                        <p className="text-xs font-semibold text-muted-foreground truncate mt-1.5" title={invoice.introduction}>
+                          {invoice.introduction}
+                        </p>
+                      ) : (
+                        <p className="text-xs font-medium italic text-muted-foreground/60 truncate mt-1.5">
+                          No introduction provided
+                        </p>
+                      )}
+                      <div className="flex flex-wrap items-center gap-2 mt-3">
                         <Badge variant="secondary" className="text-[10px] font-bold uppercase tracking-wider bg-muted/50">
                           Due: {(() => {
                             try {
