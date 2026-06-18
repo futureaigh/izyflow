@@ -1378,17 +1378,6 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
                       >
                         <Download className="h-4 w-4" />
                       </Button>
-                      {!!invoice.paidAmount && invoice.paidAmount > 0 && (
-                        <Button 
-                          size="icon" 
-                          variant="ghost" 
-                          onClick={() => generateReceipt(invoice)}
-                          className="h-9 w-9 text-emerald-600 hover:bg-emerald-50/50 rounded-xl"
-                          title="Download Receipt"
-                        >
-                          <Receipt className="h-4 w-4" />
-                        </Button>
-                      )}
                     </div>
                     
                     <AlertDialog>
