@@ -20,7 +20,7 @@ interface AdminPortalProps {
   onConfigUpdate?: (config: CMSConfig) => void;
 }
 
-export function AdminPortal({ user, initialConfig, isConfigLoading }: AdminPortalProps) {
+export function AdminPortal({ user, initialConfig, isConfigLoading, onConfigUpdate }: AdminPortalProps) {
   const [config, setConfig] = useState<CMSConfig | null>(initialConfig);
   const [loading, setLoading] = useState(isConfigLoading);
   const [saving, setSaving] = useState(false);
