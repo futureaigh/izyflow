@@ -58,6 +58,7 @@ export const api = {
   createInvoice: (wsId: string, data: any) => fetchAPI(`/api/workspaces/${wsId}/invoices`, { method: "POST", body: JSON.stringify(data) }),
   updateInvoice: (wsId: string, id: string, data: any) => fetchAPI(`/api/workspaces/${wsId}/invoices/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteInvoice: (wsId: string, id: string) => fetchAPI(`/api/workspaces/${wsId}/invoices/${id}`, { method: "DELETE" }),
+  recordPayment: (wsId: string, id: string, data: any) => fetchAPI(`/api/workspaces/${wsId}/invoices/${id}/payments`, { method: "POST", body: JSON.stringify(data) }),
 
   // Catalog Items
   getCatalogItems: (wsId: string) => fetchAPI(`/api/workspaces/${wsId}/catalog-items`),
