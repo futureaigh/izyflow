@@ -46,6 +46,7 @@ export function PublicCatalog({ workspaceId }: PublicCatalogProps) {
   // Checkout Form
   const [customerName, setCustomerName] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('pay_on_delivery');
   const [isProcessing, setIsProcessing] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -107,6 +108,7 @@ export function PublicCatalog({ workspaceId }: PublicCatalogProps) {
       await api.publicCheckout(workspace.id, {
         customerName,
         customerEmail,
+        paymentMethod,
         cart,
         cartTotal
       });
@@ -321,6 +323,32 @@ export function PublicCatalog({ workspaceId }: PublicCatalogProps) {
                 placeholder="john@example.com" 
                 className="h-14 rounded-2xl border-border bg-muted/30 font-bold"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Payment Method</Label>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { id: 'pay_on_delivery', label: 'Pay on Delivery' },
+                  { id: 'bank_transfer', label: 'Bank Transfer' },
+                  { id: 'mobile_money', label: 'Mobile Money' },
+                  { id: 'online', label: 'Online Payment' },
+                ].map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setPaymentMethod(m.id)}
+                    className={cn(
+                      'h-11 rounded-xl border-2 text-xs font-black uppercase tracking-wide transition-all',
+                      paymentMethod === m.id
+                        ? 'border-purple-500 bg-purple-500/10 text-purple-400'
+                        : 'border-border bg-muted/20 text-muted-foreground hover:border-purple-500/40'
+                    )}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="p-6 rounded-3xl bg-muted/50 space-y-2">

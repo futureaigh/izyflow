@@ -102,4 +102,11 @@ export const api = {
     method: "POST",
     body: JSON.stringify({ contents, config, model })
   }),
+
+  // Admin
+  adminGetStats: () => fetchAPI("/api/admin/stats"),
+  adminUpdateUserRole: (uid: string, role: string) => fetchAPI(`/api/admin/users/${uid}/role`, { method: "PUT", body: JSON.stringify({ role }) }),
+  adminLogVisit: (data: any) => fetchAPI("/api/admin/analytics/visit", { method: "POST", body: JSON.stringify(data) }),
+  adminLogQuery: (data: any) => fetchAPI("/api/admin/analytics/query", { method: "POST", body: JSON.stringify(data) }),
+  adminLogError: (data: any) => fetchAPI("/api/admin/errors", { method: "POST", body: JSON.stringify(data) }),
 };

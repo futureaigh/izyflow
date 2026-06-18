@@ -12,7 +12,7 @@ import { db } from "./src/db/index";
 import { 
   users, workspaces, accounts, allocationRules, transactions, 
   invoices, catalogItems, pricingCalculations, contacts, 
-  staff, staffReceipts, cmsConfigs 
+  staff, staffReceipts, cmsConfigs, analytics, appErrors
 } from "./src/db/schema";
 import { eq, and } from "drizzle-orm";
 import { withCache, invalidateCache, buildCacheKey, rateLimit } from "./src/lib/redis";
@@ -1198,6 +1198,76 @@ async function startServer() {
       console.error(err);
       res.status(500).json({ error: "Failed to delete staff receipt" });
     }
+  });
+
+  // --- ADMIN ENDPOINTS ---
+  const requireAdmin = () => requireAuthMiddleware(); // reuse same auth; role checked inside handler
+
+  app.get("/api/admin/stats", requireAdmin(), async (req: any, res) => {
+    try {
+      const userRole = req.auth?.sessionClaims?.metadata?.role;
+      if (userRole !== 'Admin') return res.status(403).json({ error: 'Forbidden' });
+      const [allUsers, visits, queries, errors] = await Promise.all([
+        db.select().from(users),
+        db.select().from(analytics).where(eq(analytics.type, 'visit')),
+        db.select().from(analytics).where(eq(analytics.type, 'izy_query')),
+        db.select().from(appErrors),
+      ]);
+      res.json({ users: allUsers, visits, queries, errors });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch admin stats' });
+    }
+  });
+
+  app.put("/api/admin/users/:uid/role", requireAdmin(), async (req: any, res) => {
+    const { uid } = req.params;
+    const { role } = req.body;
+    try {
+      const userRole = req.auth?.sessionClaims?.metadata?.role;
+      if (userRole !== 'Admin') return res.status(403).json({ error: 'Forbidden' });
+      await db.update(users).set({ role }).where(eq(users.uid, uid));
+      // Also update Clerk metadata
+      await clerkClient.users.updateUserMetadata(uid, { publicMetadata: { role } });
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to update role' });
+    }
+  });
+
+  app.post("/api/admin/analytics/visit", async (req, res) => {
+    try {
+      const { userId, path: visitPath, userAgent } = req.body;
+      await db.insert(analytics).values({
+        id: `vis_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        type: 'visit', userId, path: visitPath, userAgent,
+        timestamp: new Date().toISOString(),
+      });
+      res.json({ success: true });
+    } catch { res.status(500).json({ error: 'Failed to log visit' }); }
+  });
+
+  app.post("/api/admin/analytics/query", async (req, res) => {
+    try {
+      const { userId, query } = req.body;
+      await db.insert(analytics).values({
+        id: `qry_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        type: 'izy_query', userId, query,
+        timestamp: new Date().toISOString(),
+      });
+      res.json({ success: true });
+    } catch { res.status(500).json({ error: 'Failed to log query' }); }
+  });
+
+  app.post("/api/admin/errors", async (req, res) => {
+    try {
+      const { error, query, userId } = req.body;
+      await db.insert(appErrors).values({
+        id: `err_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        error, query, userId,
+        timestamp: new Date().toISOString(),
+      });
+      res.json({ success: true });
+    } catch { res.status(500).json({ error: 'Failed to log error' }); }
   });
 
   // --- CMS CONFIG ENDPOINTS ---
