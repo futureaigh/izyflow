@@ -29,3 +29,4 @@ performance-*.json
 /src/utils/deferload*.js
 /src/performance-init*.js
 vite.config.*.js
+izyo/
