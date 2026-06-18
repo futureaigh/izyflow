@@ -88,7 +88,7 @@ export function Sidebar({
     >
       <div className="mb-8 flex items-center gap-3 px-2">
         {config?.sidebarLogoUrl || config?.logoUrl || LOGO_URL ? (
-          <img src={config?.sidebarLogoUrl || config?.logoUrl || LOGO_URL} alt="Logo" className="h-8 w-auto object-contain" />
+          <img src={config?.sidebarLogoUrl || config?.logoUrl || LOGO_URL} alt="Logo" className="h-8 w-auto object-contain brightness-0 invert" />
         ) : (
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 text-white font-bold">
             <LayoutDashboard className="h-4 w-4" />
