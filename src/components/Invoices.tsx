@@ -948,11 +948,6 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
                     </div>
                   </div>
 
-                  {editingInvoice.title && (
-                    <div className="pt-4 pb-0">
-                      <h3 className="text-lg font-black text-foreground">{editingInvoice.title}</h3>
-                    </div>
-                  )}
                   {editingInvoice.introduction && (
                     <div className="pt-4 pb-2">
                       <p className="text-sm text-foreground/80 leading-relaxed">{editingInvoice.introduction}</p>
