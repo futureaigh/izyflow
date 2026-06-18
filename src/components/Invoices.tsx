@@ -1365,7 +1365,7 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
                         variant="ghost" 
                         onClick={() => startCopy(invoice)}
                         className="h-9 w-9 text-indigo-600 hover:bg-indigo-50/50 rounded-xl"
-                        title="Copy Invoice"
+                        title="Make Copy"
                       >
                         <Copy className="h-4 w-4" />
                       </Button>
