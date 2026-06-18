@@ -8,7 +8,7 @@ import { Label } from './ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from './ui/dialog';
-import { Plus, Trash2, FileText, Send, CheckCircle2, AlertCircle, Loader2, Download, FileSpreadsheet, Zap, Edit, Receipt, History, CreditCard, Printer, LayoutGrid, Clock, Search, Eye, Bot, BookOpen, Calendar, Users } from 'lucide-react';
+import { Plus, Trash2, FileText, Send, CheckCircle2, AlertCircle, Loader2, Download, FileSpreadsheet, Zap, Edit, Receipt, History, CreditCard, Printer, LayoutGrid, Clock, Search, Eye, Bot, BookOpen, Calendar, Users, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
 import { exportToCSV, exportToExcel, exportToPDF, generateInvoicePDF, generateReceiptPDF } from '../lib/dataEngine';
@@ -1329,17 +1329,6 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
                           >
                             <CreditCard className="h-4 w-4" />
                           </Button>
-                          {(invoice.status === 'Sent' || invoice.status === 'Partial') && ((invoice.amount || 0) - (invoice.paidAmount || 0)) > 0 && (
-                            <Button 
-                              size="icon" 
-                              variant="ghost" 
-                              onClick={() => markAsPaid(invoice)}
-                              className="h-9 w-9 text-green-600 hover:bg-green-50/50 rounded-xl"
-                              title="Mark as Paid"
-                            >
-                              <CheckCircle2 className="h-4 w-4" />
-                            </Button>
-                          )}
                           <Button 
                             size="icon" 
                             variant="ghost" 
@@ -1354,15 +1343,6 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
                       <Button 
                         size="icon" 
                         variant="ghost" 
-                        onClick={() => startCopy(invoice)}
-                        className="h-9 w-9 text-amber-600 hover:bg-amber-50/50 rounded-xl"
-                        title="Copy Invoice"
-                      >
-                        <FileText className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        size="icon" 
-                        variant="ghost" 
                         onClick={() => {
                           setEditingInvoice(invoice);
                           setIsPreviewing(true);
@@ -1371,6 +1351,15 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
                         title="Preview Invoice"
                       >
                         <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        onClick={() => startCopy(invoice)}
+                        className="h-9 w-9 text-indigo-600 hover:bg-indigo-50/50 rounded-xl"
+                        title="Copy Invoice"
+                      >
+                        <Copy className="h-4 w-4" />
                       </Button>
                       <Button 
                         size="icon" 
