@@ -1,6 +1,6 @@
 import { Currency } from "./types";
 
-export const LOGO_URL = "/logo.png";
+export const LOGO_URL = "https://fe5lpvispw.ufs.sh/f/DFYBeUqk6Uo0FZB8CGgMlXyUIWpsCrZP2akSH8LzbfqD93xY";
 
 export const EXCHANGE_RATES: Record<Currency, number> = {
   GHS: 1,
