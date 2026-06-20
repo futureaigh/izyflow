@@ -208,13 +208,19 @@ export default function App({ auth }: AppProps) {
 
     const fetchCMS = async () => {
       try {
-        // Use local storage for CMS config (frontend-only approach)
-        const storedConfig = localStorage.getItem('cms_config');
-        const config = storedConfig ? JSON.parse(storedConfig) : null;
-        setCmsConfig(config);
-        setIsConfigLoading(false);
+        const config = await api.getCMSConfig().catch(() => null);
+        if (config) {
+          setCmsConfig(config);
+          localStorage.setItem('cms_config', JSON.stringify(config));
+        } else {
+          const storedConfig = localStorage.getItem('cms_config');
+          if (storedConfig) setCmsConfig(JSON.parse(storedConfig));
+        }
       } catch (error) {
         console.error('CMS Config fetch failed:', error);
+        const storedConfig = localStorage.getItem('cms_config');
+        if (storedConfig) setCmsConfig(JSON.parse(storedConfig));
+      } finally {
         setIsConfigLoading(false);
       }
     };
@@ -411,8 +417,12 @@ export default function App({ auth }: AppProps) {
         link.rel = 'icon';
         document.getElementsByTagName('head')[0].appendChild(link);
       }
-      const sep = cmsConfig.faviconUrl.includes('?') ? '&' : '?';
-      link.href = `${cmsConfig.faviconUrl}${sep}_t=${Date.now()}`;
+      if (cmsConfig.faviconUrl.startsWith('data:')) {
+        link.href = cmsConfig.faviconUrl;
+      } else {
+        const sep = cmsConfig.faviconUrl.includes('?') ? '&' : '?';
+        link.href = `${cmsConfig.faviconUrl}${sep}_t=${Date.now()}`;
+      }
     }
   }, [cmsConfig]);
 
