@@ -21,7 +21,13 @@ interface AdminPortalProps {
 }
 
 export function AdminPortal({ user, initialConfig, isConfigLoading, onConfigUpdate }: AdminPortalProps) {
-  const [config, setConfig] = useState<CMSConfig | null>(initialConfig);
+  const DEFAULT_CONFIG: Partial<CMSConfig> = {
+    logoUrl: "https://fe5lpvispw.ufs.sh/f/DFYBeUqk6Uo0FZB8CGgMlXyUIWpsCrZP2akSH8LzbfqD93xY",
+    faviconUrl: "https://fe5lpvispw.ufs.sh/f/DFYBeUqk6Uo0FZB8CGgMlXyUIWpsCrZP2akSH8LzbfqD93xY",
+    sidebarLogoUrl: "https://fe5lpvispw.ufs.sh/f/DFYBeUqk6Uo0FZB8CGgMlXyUIWpsCrZP2akSH8LzbfqD93xY",
+  };
+
+  const [config, setConfig] = useState<CMSConfig | null>(initialConfig || DEFAULT_CONFIG as CMSConfig);
   const [loading, setLoading] = useState(isConfigLoading);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'branding' | 'typography' | 'cms' | 'analytics' | 'team' | 'domain'>('branding');
@@ -34,7 +40,9 @@ export function AdminPortal({ user, initialConfig, isConfigLoading, onConfigUpda
 
   useEffect(() => {
     if (initialConfig) {
-      setConfig(initialConfig);
+      setConfig(prev => ({ ...DEFAULT_CONFIG, ...initialConfig, ...(prev || {}) }) as CMSConfig);
+    } else if (!isConfigLoading) {
+      setConfig(DEFAULT_CONFIG as CMSConfig);
     }
     setLoading(isConfigLoading);
   }, [initialConfig, isConfigLoading]);
