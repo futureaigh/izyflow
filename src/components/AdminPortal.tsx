@@ -25,6 +25,8 @@ export function AdminPortal({ user, initialConfig, isConfigLoading, onConfigUpda
     logoUrl: "https://fe5lpvispw.ufs.sh/f/DFYBeUqk6Uo0FZB8CGgMlXyUIWpsCrZP2akSH8LzbfqD93xY",
     faviconUrl: "https://fe5lpvispw.ufs.sh/f/DFYBeUqk6Uo0FZB8CGgMlXyUIWpsCrZP2akSH8LzbfqD93xY",
     sidebarLogoUrl: "https://fe5lpvispw.ufs.sh/f/DFYBeUqk6Uo0FZB8CGgMlXyUIWpsCrZP2akSH8LzbfqD93xY",
+    heroHeading: "Track Your Money. Know Your Business",
+    heroSubtext: "IzyFlow automates your invoicing, tracks every expense, and gives you absolute clarity on your business health. No spreadsheets, no guesswork.",
   };
 
   const [config, setConfig] = useState<CMSConfig | null>(initialConfig || DEFAULT_CONFIG as CMSConfig);
