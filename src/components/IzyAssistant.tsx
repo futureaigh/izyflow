@@ -739,13 +739,14 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
     if (!user) return;
     setIsLoading(true);
     try {
-      await api.updateProfile({
+      const updatedProfile = await api.updateProfile({
         preferences: {
           ...user.preferences,
           ...pending.updates
         },
         updatedAt: new Date().toISOString()
       });
+      window.dispatchEvent(new CustomEvent('update-user', { detail: updatedProfile }));
       
       toast.success("Preferences updated!");
       

@@ -40,10 +40,6 @@ createRoot(document.getElementById('root')!).render(
             },
           },
         }}
-        sessionOptions={{
-          // Increase session duration to 30 days
-          sessionDurationInMinutes: 30 * 24 * 60,
-        }}
       >
         <ClerkAppWrapper />
       </ClerkProvider>

@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Workspace, Invoice, InvoiceItem, Account, AllocationRule, Transaction, InvoiceStatus, TransactionType } from '../types';
+import { Workspace, Invoice, InvoiceItem, Account, AllocationRule, Transaction, InvoiceStatus, TransactionType, Contact } from '../types';
 import { cn, parseLocalDate } from '../lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Button } from './ui/button';
@@ -28,6 +28,7 @@ interface InvoicesProps {
   invoices: Invoice[];
   accounts: Account[];
   allocationRules: AllocationRule[];
+  contacts?: Contact[];
   loading: boolean;
 }
 
@@ -37,6 +38,7 @@ export function Invoices({
   invoices: propInvoices,
   accounts: propAccounts,
   allocationRules: propRules,
+  contacts: propContacts = [],
   loading: propLoading
 }: InvoicesProps) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -77,10 +79,35 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
   const [businessSearchOpen, setBusinessSearchOpen] = useState(false);
 
   const uniqueClients = useMemo(() => {
-    return Array.from(new Map(invoices.map(inv => [inv.clientName.toLowerCase(), inv])).values())
-      .filter(inv => inv.clientName)
+    const clientsMap = new Map<string, { clientName: string, clientBusinessName?: string, clientEmail?: string, clientPhone?: string }>();
+    
+    // Add clients from previous invoices
+    invoices.forEach(inv => {
+      if (inv.clientName && !clientsMap.has(inv.clientName.toLowerCase())) {
+        clientsMap.set(inv.clientName.toLowerCase(), {
+          clientName: inv.clientName,
+          clientBusinessName: inv.clientBusinessName,
+          clientEmail: inv.clientEmail,
+          clientPhone: inv.clientPhone
+        });
+      }
+    });
+
+    // Add saved contacts (overrides previous invoice details if same name)
+    propContacts.forEach(contact => {
+      if (contact.name && (!contact.type || contact.type !== 'Payer')) {
+        clientsMap.set(contact.name.toLowerCase(), {
+          clientName: contact.name,
+          clientEmail: contact.email || undefined,
+          clientPhone: contact.phone || undefined,
+          clientBusinessName: '' // Contacts don't currently have a business name field
+        });
+      }
+    });
+
+    return Array.from(clientsMap.values())
       .sort((a, b) => a.clientName.localeCompare(b.clientName));
-  }, [invoices]);
+  }, [invoices, propContacts]);
 
   const uniqueBusinesses = useMemo(() => {
     return Array.from(new Map(invoices.map(inv => [inv.clientBusinessName?.toLowerCase(), inv])).values())
@@ -102,7 +129,7 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
     ).slice(0, 8);
   }, [clientBusinessName, uniqueBusinesses]);
 
-  const selectClient = (client: Invoice) => {
+  const selectClient = (client: any) => {
     setClientName(client.clientName);
     setClientBusinessName(client.clientBusinessName || '');
     setClientEmail(client.clientEmail || '');
@@ -562,7 +589,7 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
     if (activeTab === 'pending') return status !== 'Paid' && !status.includes('Overdue');
     if (activeTab === 'overdue') return status.includes('Overdue');
     return true;
-  });
+  }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   return (
     <div className="space-y-8 pb-12">
@@ -679,7 +706,7 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
                       <div className="absolute z-50 w-full mt-1 bg-card border border-border rounded-xl shadow-xl overflow-hidden max-h-[200px] overflow-y-auto overflow-x-hidden scrollbar-thin">
                         {filteredClients.map((client) => (
                           <div 
-                            key={`client-${client.id}`}
+                            key={`client-${client.clientName}`}
                             className="p-3 hover:bg-muted cursor-pointer transition-colors border-b border-border last:border-0"
                             onMouseDown={(e) => {
                               e.preventDefault();

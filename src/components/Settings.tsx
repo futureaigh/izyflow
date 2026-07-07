@@ -517,9 +517,10 @@ export function Settings({ workspace, user }: SettingsProps) {
         };
       }
 
-      await api.updateProfile({
+      const updatedProfile = await api.updateProfile({
         preferences: mergedPrefs
       });
+      window.dispatchEvent(new CustomEvent('update-user', { detail: updatedProfile }));
       toast.success('Preferences updated');
     } catch (error) {
       toast.error('Failed to update preferences');

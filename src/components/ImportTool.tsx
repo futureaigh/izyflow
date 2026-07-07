@@ -7,6 +7,7 @@ import { cn, getFinancialFlags } from '../lib/utils';
 import { toast } from 'sonner';
 import { Workspace } from '../types';
 import { Transaction, Account } from '../types';
+import { api } from '../lib/api';
 
 interface ImportToolProps {
   workspace: Workspace;
@@ -152,13 +153,11 @@ export function ImportTool({ workspace }: ImportToolProps) {
       setIsParsing(true);
       
       // Fetch existing transactions for this workspace to check for duplicates
-      const existingSnap = await getDocs(collection(db, `workspaces/${workspace.id}/transactions`));
-      const existingTransactions = existingSnap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction));
+      const existingTransactions = await api.getTransactions(workspace.id);
 
       // Fetch accounts to assign imported transactions and update balances
-      const accountsSnap = await getDocs(collection(db, `workspaces/${workspace.id}/accounts`));
-      const accounts = accountsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Account));
-      const defaultAccount = accounts.find(a => a.isDefault) || accounts[0];
+      const accounts = await api.getAccounts(workspace.id);
+      const defaultAccount = accounts.find((a: Account) => a.isDefault) || accounts[0];
 
       if (!defaultAccount) {
         toast.error('No account found. Please create an account first.');
@@ -166,9 +165,7 @@ export function ImportTool({ workspace }: ImportToolProps) {
         return;
       }
 
-      const batch = writeBatch(db);
-      let batchCount = 0;
-      const MAX_BATCH_SIZE = 400; // Firestore limit is 500, keeping it safe
+      let importedCount = 0;
 
       if (parsedData) {
         // Robust field extraction with aliases
@@ -289,23 +286,19 @@ export function ImportTool({ workspace }: ImportToolProps) {
             // If existing didn't have an accountId, assign it and update balance
             if (!existing.accountId && defaultAccount) {
               updates.accountId = defaultAccount.id;
-              batch.update(doc(db, `workspaces/${workspace.id}/accounts`, defaultAccount.id), {
-                balance: increment(balanceChange)
-              });
+              // API updates balance automatically when we update transaction account
             }
 
             if (Object.keys(updates).length > 0) {
-              batch.update(doc(db, `workspaces/${workspace.id}/transactions`, existing.id), {
+              await api.updateTransaction(workspace.id, existing.id, {
                 ...updates,
                 updatedAt: new Date().toISOString()
               });
-              batchCount++;
+              importedCount++;
             }
           } else {
             // Create new transaction
-            const txRef = doc(collection(db, `workspaces/${workspace.id}/transactions`));
-            batch.set(txRef, {
-              workspaceId: workspace.id,
+            await api.createTransaction(workspace.id, {
               type,
               amount,
               currency: workspace.currency,
@@ -317,42 +310,27 @@ export function ImportTool({ workspace }: ImportToolProps) {
               isLoan,
               loanStatus,
               accountId: defaultAccount.id,
-              ...flags,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString()
+              ...flags
             });
-            
-            batch.update(doc(db, `workspaces/${workspace.id}/accounts`, defaultAccount.id), {
-              balance: increment(balanceChange)
-            });
-            batchCount += 2;
-          }
-
-          if (batchCount >= MAX_BATCH_SIZE) {
-            await batch.commit();
-            batchCount = 0;
+            importedCount++;
           }
         }
       } else if (ocrText) {
         // Simple OCR to transaction (one entry)
-        const txRef = doc(collection(db, `workspaces/${workspace.id}/transactions`));
-        batch.set(txRef, {
-          workspaceId: workspace.id,
+        await api.createTransaction(workspace.id, {
           type: 'Expense',
           amount: 0, // Manual entry needed
           currency: workspace.currency,
           category: 'OCR Import',
-          date: new Date().toISOString(),
+          date: new Date().toISOString().split('T')[0],
           description: ocrText.substring(0, 100),
-          accountId: defaultAccount.id,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
+          accountId: defaultAccount.id
         });
-        batchCount++;
+        importedCount++;
       }
 
-      if (batchCount > 0) {
-        await batch.commit();
+      if (importedCount > 0) {
+        window.dispatchEvent(new CustomEvent('refresh-data'));
       }
 
       toast.success('Data imported successfully');

@@ -829,6 +829,61 @@ async function startServer() {
       };
       const [inserted] = await db.insert(invoices).values(newInvoice).returning();
       await invalidateCache(buildCacheKey("ws", workspaceId, "invoices"));
+
+      // 1. Auto-save contact if it doesn't exist
+      if (inserted.clientName) {
+        const [existingContact] = await db.select().from(contacts)
+          .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.name, inserted.clientName)));
+        
+        if (!existingContact) {
+          const contactId = crypto.randomUUID();
+          await db.insert(contacts).values({
+            id: contactId,
+            workspaceId,
+            name: inserted.clientName,
+            email: inserted.clientEmail || '',
+            phone: inserted.clientPhone || '',
+            type: 'Payer',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            lastUsed: new Date().toISOString()
+          });
+        } else {
+          await db.update(contacts)
+            .set({ 
+              lastUsed: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            })
+            .where(eq(contacts.id, existingContact.id));
+        }
+        await invalidateCache(buildCacheKey("ws", workspaceId, "contacts"));
+      }
+
+      // 2. Auto-record transaction if paidAmount > 0
+      const amountNum = Number(inserted.paidAmount || 0);
+      if (amountNum > 0) {
+        const txnId = crypto.randomUUID();
+        const transactionData = {
+          workspaceId,
+          type: 'Income' as const,
+          amount: amountNum,
+          currency: inserted.currency,
+          category: 'Invoice Payment',
+          date: new Date().toISOString().split('T')[0],
+          time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
+          description: `Initial payment for Invoice #${inserted.id.slice(-6).toUpperCase()} - ${inserted.clientName}`,
+          payeePayer: inserted.clientName,
+          invoiceId: inserted.id,
+          accountId: '', // Assuming empty for initial unless specified
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          affects_cash: true,
+          affects_profit: true
+        };
+        await db.insert(transactions).values({ id: txnId, ...transactionData });
+        await invalidateCache(buildCacheKey("ws", workspaceId, "transactions"));
+      }
+
       res.json({
         ...inserted,
         items: safeParse(inserted.items)
@@ -898,6 +953,34 @@ async function startServer() {
           updatedAt: new Date().toISOString()
         })
         .where(eq(invoices.id, id));
+
+      if (existing.clientName) {
+        const [existingContact] = await db.select().from(contacts)
+          .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.name, existing.clientName)));
+        
+        if (!existingContact) {
+          const contactId = crypto.randomUUID();
+          await db.insert(contacts).values({
+            id: contactId,
+            workspaceId,
+            name: existing.clientName,
+            email: existing.clientEmail || '',
+            phone: existing.clientPhone || '',
+            type: 'Payer',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            lastUsed: new Date().toISOString()
+          });
+        } else {
+          await db.update(contacts)
+            .set({ 
+              lastUsed: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            })
+            .where(eq(contacts.id, existingContact.id));
+        }
+        await invalidateCache(buildCacheKey("ws", workspaceId, "contacts"));
+      }
 
       const txnId = crypto.randomUUID();
       const transactionData = {

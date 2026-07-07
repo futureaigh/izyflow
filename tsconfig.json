@@ -23,5 +23,5 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "exclude": ["izyflow-beta", "node_modules", "dist"]
+  "exclude": ["izyflow-beta", "izyo", "node_modules", "dist"]
 }

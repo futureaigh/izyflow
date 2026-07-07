@@ -343,9 +343,16 @@ export default function App({ auth }: AppProps) {
         console.error(err);
       }
     };
+    const handleUpdateUser = (e: Event) => {
+      const customEvent = e as CustomEvent<UserProfile>;
+      setUser(customEvent.detail);
+      localStorage.setItem(`user_profile_${customEvent.detail.uid}`, JSON.stringify(customEvent.detail));
+    };
+    window.addEventListener('update-user', handleUpdateUser);
     window.addEventListener('refresh-data', handleRefresh);
     window.addEventListener('refresh-workspaces', handleRefreshWorkspaces);
     return () => {
+      window.removeEventListener('update-user', handleUpdateUser);
       window.removeEventListener('refresh-data', handleRefresh);
       window.removeEventListener('refresh-workspaces', handleRefreshWorkspaces);
     };
@@ -803,6 +810,7 @@ export default function App({ auth }: AppProps) {
                   invoices={invoices}
                   accounts={accounts}
                   allocationRules={allocationRules}
+                  contacts={contacts}
                   loading={isDataLoading}
                 />
               </motion.div>
