@@ -1063,7 +1063,8 @@ async function startServer() {
     const { workspaceId } = req.params;
     const data = req.body;
     try {
-      const [inserted] = await db.insert(contacts).values({ ...data, workspaceId }).returning();
+      const id = data.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2));
+      const [inserted] = await db.insert(contacts).values({ id, ...data, workspaceId }).returning();
       await invalidateCache(buildCacheKey("ws", workspaceId, "contacts"));
       res.json(inserted);
     } catch (err) {

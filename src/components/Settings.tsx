@@ -496,7 +496,9 @@ export function Settings({ workspace, user }: SettingsProps) {
   const addContact = async () => {
     if (!workspace || !newContactName) return;
     try {
+      const id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
       await api.createContact(workspace.id, {
+        id,
         name: newContactName,
         email: newContactEmail,
         phone: newContactPhone,
