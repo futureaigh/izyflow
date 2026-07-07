@@ -45,6 +45,7 @@ export const api = {
   // Allocation Rules
   getAllocationRules: (wsId: string) => fetchAPI(`/api/workspaces/${wsId}/allocation-rules`),
   createAllocationRule: (wsId: string, data: any) => fetchAPI(`/api/workspaces/${wsId}/allocation-rules`, { method: "POST", body: JSON.stringify(data) }),
+  updateAllocationRule: (wsId: string, id: string, data: any) => fetchAPI(`/api/workspaces/${wsId}/allocation-rules/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteAllocationRule: (wsId: string, id: string) => fetchAPI(`/api/workspaces/${wsId}/allocation-rules/${id}`, { method: "DELETE" }),
 
   // Transactions

@@ -574,6 +574,18 @@ async function startServer() {
       res.status(500).json({ error: "Failed to create allocation rule" });
     }
   });
+  app.put("/api/workspaces/:workspaceId/allocation-rules/:id", requireAuthMiddleware(), async (req, res) => {
+    const { workspaceId, id } = req.params;
+    const data = req.body;
+    try {
+      const [updated] = await db.update(allocationRules).set(data).where(eq(allocationRules.id, id)).returning();
+      await invalidateCache(buildCacheKey("ws", workspaceId, "allocation-rules"));
+      res.json(updated);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to update allocation rule" });
+    }
+  });
 
   app.delete("/api/workspaces/:workspaceId/allocation-rules/:id", requireAuthMiddleware(), async (req, res) => {
     const { workspaceId, id } = req.params;

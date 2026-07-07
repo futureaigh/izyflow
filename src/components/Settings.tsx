@@ -8,7 +8,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
-import { Plus, Trash2, Save, Percent, Wallet, Info, Settings as SettingsIcon, CreditCard, Zap, Image as ImageIcon, Tag, User as UserIcon, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import { Plus, Trash2, Save, Percent, Wallet, Info, Settings as SettingsIcon, CreditCard, Zap, Image as ImageIcon, Tag, User as UserIcon, ChevronDown, ChevronUp, Sparkles, Check, X, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { UserProfile } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
@@ -27,6 +27,12 @@ export function Settings({ workspace, user }: SettingsProps) {
   const [newRulePercentage, setNewRulePercentage] = useState(0);
   const [newRuleAccountId, setNewRuleAccountId] = useState('');
 
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
+  const [editAccountName, setEditAccountName] = useState('');
+
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [editRuleName, setEditRuleName] = useState('');
+  const [editRulePercentage, setEditRulePercentage] = useState(0);
   const [workspaceName, setWorkspaceName] = useState(workspace?.name || '');
   const [workspaceDescription, setWorkspaceDescription] = useState(workspace?.description || '');
   const [workspaceLogoUrl, setWorkspaceLogoUrl] = useState(workspace?.logoUrl || '');
@@ -177,6 +183,18 @@ export function Settings({ workspace, user }: SettingsProps) {
     }
   };
 
+  const updateAccount = async () => {
+    if (!workspace || !editingAccountId) return;
+    try {
+      await api.updateAccount(workspace.id, editingAccountId, { name: editAccountName });
+      toast.success('Account updated');
+      setEditingAccountId(null);
+      fetchAccounts();
+    } catch (error) {
+      toast.error('Failed to update account');
+    }
+  };
+
   const deleteRule = async (id: string) => {
     if (!workspace) return;
     try {
@@ -185,6 +203,21 @@ export function Settings({ workspace, user }: SettingsProps) {
       fetchRules();
     } catch (error) {
       toast.error('Failed to delete rule');
+    }
+  };
+
+  const updateRule = async () => {
+    if (!workspace || !editingRuleId) return;
+    try {
+      await api.updateAllocationRule(workspace.id, editingRuleId, { 
+        name: editRuleName, 
+        percentage: editRulePercentage 
+      });
+      toast.success('Rule updated');
+      setEditingRuleId(null);
+      fetchRules();
+    } catch (error) {
+      toast.error('Failed to update rule');
     }
   };
 
@@ -1283,17 +1316,54 @@ export function Settings({ workspace, user }: SettingsProps) {
                   <TableBody>
                     {accounts.map((a) => (
                       <TableRow key={a.id} className="border-border hover:bg-accent/50">
-                        <TableCell className="font-medium text-foreground">{a.name}</TableCell>
+                        <TableCell className="font-medium text-foreground">
+                          {editingAccountId === a.id ? (
+                            <Input 
+                              value={editAccountName}
+                              onChange={(e) => setEditAccountName(e.target.value)}
+                              className="h-8 w-full max-w-[200px]"
+                              autoFocus
+                            />
+                          ) : (
+                            a.name
+                          )}
+                        </TableCell>
                         <TableCell className="text-right text-foreground">{workspace.currency} {a.balance.toLocaleString()}</TableCell>
                         <TableCell>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            onClick={() => deleteAccount(a.id)}
-                            className="text-muted-foreground hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <div className="flex justify-end gap-2">
+                            {editingAccountId === a.id ? (
+                              <>
+                                <Button variant="ghost" size="icon" onClick={updateAccount} className="text-green-500 hover:text-green-600">
+                                  <Check className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" onClick={() => setEditingAccountId(null)} className="text-muted-foreground hover:text-foreground">
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  onClick={() => {
+                                    setEditingAccountId(a.id);
+                                    setEditAccountName(a.name);
+                                  }}
+                                  className="text-muted-foreground hover:text-foreground"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  onClick={() => deleteAccount(a.id)}
+                                  className="text-muted-foreground hover:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1384,21 +1454,70 @@ export function Settings({ workspace, user }: SettingsProps) {
                     {rules.map((r) => (
                       <TableRow key={r.id} className="border-border hover:bg-accent/50">
                         <TableCell className="font-medium text-foreground">
-                          {r.name}
-                          <p className="text-[10px] text-muted-foreground">
-                            → {accounts.find(a => a.id === r.targetAccountId)?.name}
-                          </p>
+                          {editingRuleId === r.id ? (
+                            <Input 
+                              value={editRuleName}
+                              onChange={(e) => setEditRuleName(e.target.value)}
+                              className="h-8 w-full max-w-[150px]"
+                              autoFocus
+                            />
+                          ) : (
+                            <>
+                              {r.name}
+                              <p className="text-[10px] text-muted-foreground">
+                                → {accounts.find(a => a.id === r.targetAccountId)?.name}
+                              </p>
+                            </>
+                          )}
                         </TableCell>
-                        <TableCell className="text-right text-foreground">{r.percentage}%</TableCell>
+                        <TableCell className="text-right text-foreground">
+                          {editingRuleId === r.id ? (
+                            <Input 
+                              type="number"
+                              value={editRulePercentage}
+                              onChange={(e) => setEditRulePercentage(Number(e.target.value))}
+                              className="h-8 w-16 ml-auto text-right"
+                            />
+                          ) : (
+                            `${r.percentage}%`
+                          )}
+                        </TableCell>
                         <TableCell>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            onClick={() => deleteRule(r.id)}
-                            className="text-muted-foreground hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <div className="flex justify-end gap-2">
+                            {editingRuleId === r.id ? (
+                              <>
+                                <Button variant="ghost" size="icon" onClick={updateRule} className="text-green-500 hover:text-green-600">
+                                  <Check className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" onClick={() => setEditingRuleId(null)} className="text-muted-foreground hover:text-foreground">
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  onClick={() => {
+                                    setEditingRuleId(r.id);
+                                    setEditRuleName(r.name);
+                                    setEditRulePercentage(r.percentage);
+                                  }}
+                                  className="text-muted-foreground hover:text-foreground"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  onClick={() => deleteRule(r.id)}
+                                  className="text-muted-foreground hover:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
