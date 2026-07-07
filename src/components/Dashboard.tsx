@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { EXCHANGE_RATES } from '../constants';
 import { Workspace, Transaction, Account, Invoice, Currency, AllocationRule } from '../types';
 import { cn, parseLocalDate } from '../lib/utils';
+import { api } from '../lib/api';
 import { motion } from 'motion/react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Badge } from './ui/badge';
@@ -340,11 +341,20 @@ export function Dashboard({
         }
       });
 
-      // 2. Update Firestore - Firebase removed, no promises to await
-      const promises = [];
+      // 2. Update backend via API
+      const promises = accounts.map(a => {
+        const newBalance = map[a.id] || 0;
+        if (Math.abs(newBalance - (a.balance || 0)) > 0.01) {
+          return api.updateAccount(workspace.id, a.id, { balance: newBalance });
+        }
+        return Promise.resolve();
+      });
 
       await Promise.all(promises);
       toast.success('Account balances synchronized', { id: toastId });
+      
+      // 3. Trigger UI refresh
+      window.dispatchEvent(new CustomEvent('refresh-data'));
     } catch (error) {
       console.error('Sync error:', error);
       toast.error('Failed to synchronize balances', { id: toastId });
