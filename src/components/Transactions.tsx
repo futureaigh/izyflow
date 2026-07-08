@@ -264,6 +264,7 @@ export function Transactions({
           // until the user edits it there. For a true fix, we'd need them to select the target account.
           const moveData = {
             ...transactionData,
+            id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2),
             workspaceId: targetWorkspaceId
           };
           await api.createTransaction(targetWorkspaceId, moveData);

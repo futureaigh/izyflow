@@ -258,6 +258,7 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
           // Copy & Delete fallback to move to a new workspace safely
           const moveData = {
             ...invoiceData,
+            id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2),
             workspaceId: targetWorkspaceId
           };
           await api.createInvoice(targetWorkspaceId, moveData);
