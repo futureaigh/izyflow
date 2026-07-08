@@ -806,6 +806,7 @@ export default function App({ auth }: AppProps) {
               >
                 <Invoices 
                   workspace={activeWorkspace} 
+                  workspaces={workspaces}
                   initialFilters={initialFilters} 
                   invoices={invoices}
                   accounts={accounts}
@@ -844,6 +845,7 @@ export default function App({ auth }: AppProps) {
               >
                 <Transactions 
                   workspace={activeWorkspace} 
+                  workspaces={workspaces}
                   user={user} 
                   initialFilters={initialFilters} 
                   transactions={transactions}

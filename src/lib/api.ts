@@ -35,6 +35,7 @@ export const api = {
   getWorkspaces: () => fetchAPI("/api/workspaces"),
   createWorkspace: (data: any) => fetchAPI("/api/workspaces", { method: "POST", body: JSON.stringify(data) }),
   updateWorkspace: (id: string, data: any) => fetchAPI(`/api/workspaces/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteWorkspace: (id: string) => fetchAPI(`/api/workspaces/${id}`, { method: "DELETE" }),
 
   // Accounts
   getAccounts: (wsId: string) => fetchAPI(`/api/workspaces/${wsId}/accounts`),
