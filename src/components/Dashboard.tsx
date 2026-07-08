@@ -951,6 +951,111 @@ export function Dashboard({
 
       {/* Flow Breakdown */}
 
+      {/* INVOICE ANALYTICS */}
+      {invoices.length > 0 && (
+        <div className="grid gap-4 md:grid-cols-3 mb-8">
+          <Card 
+            className="border-border bg-card shadow-sm hover:shadow-md transition-all group cursor-pointer"
+            onClick={() => openBreakdown('Total Invoiced', 'invoices', filteredInvoices)}
+          >
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Total Invoiced</CardTitle>
+              <div className="h-8 w-8 rounded-xl bg-blue-50 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <FileText className="h-4 w-4 text-blue-500" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-xl font-black text-blue-600">
+                {displayCurrency} {totalInvoiced.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <p className="text-[10px] text-muted-foreground font-bold mt-1">Total value billed</p>
+            </CardContent>
+          </Card>
+
+          <Card 
+            className="border-border bg-card shadow-sm hover:shadow-md transition-all group cursor-pointer"
+            onClick={() => openBreakdown('Outstanding Invoices', 'invoices', filteredInvoices.filter(i => (i.amount || 0) > (i.paidAmount || 0)))}
+          >
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Outstanding</CardTitle>
+              <div className="h-8 w-8 rounded-xl bg-amber-50 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Clock className="h-4 w-4 text-amber-500" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-xl font-black text-amber-600">
+                {displayCurrency} {outstandingAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <p className="text-[10px] text-muted-foreground font-bold mt-1">Awaiting collection</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border bg-card shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Collection Rate</CardTitle>
+              <div className="h-8 w-8 rounded-xl bg-emerald-50 flex items-center justify-center">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div className="text-xl font-black text-emerald-600">
+                  {conversionRate.toFixed(1)}%
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] text-muted-foreground font-bold">Collected: {displayCurrency} {paidAmountTotal.toLocaleString()}</p>
+                </div>
+              </div>
+              <Progress value={conversionRate} className="h-2 bg-emerald-100 mt-2" />
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* TREND CHART */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="mb-8"
+      >
+        <Card className="border-border bg-card shadow-sm h-full overflow-hidden relative">
+          <CardHeader className="pb-8">
+            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+              <LineChartIcon className="h-5 w-5 text-purple-500" />
+              Cash Balance Trend
+            </CardTitle>
+            <CardDescription>Daily running balance for the selected period</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0 h-[250px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={trendData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <Tooltip 
+                  contentStyle={{ backgroundColor: 'var(--popover)', border: '1px solid var(--border)', borderRadius: '8px' }}
+                  itemStyle={{ color: 'var(--popover-foreground)' }}
+                  formatter={(value: number) => [`${displayCurrency} ${convert(value).toLocaleString()}`, 'Balance']}
+                  labelStyle={{ color: 'var(--muted-foreground)' }}
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="balance" 
+                  stroke="#8b5cf6" 
+                  strokeWidth={3}
+                  fillOpacity={1} 
+                  fill="url(#colorBalance)" 
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </motion.div>
+
       {/* Charts Section */}
       <div className="grid gap-8 grid-cols-1 mt-8">
         <motion.div
@@ -1358,7 +1463,9 @@ export function Dashboard({
                         <p className="text-[10px] text-muted-foreground font-bold">
                           Due: {(() => {
                             try {
-                              return i.dueDate ? format(parseISO(i.dueDate), 'MMM d, yyyy') : 'No Due Date';
+                              if (!i.dueDate) return 'No Due Date';
+                              const parsed = parseLocalDate(i.dueDate);
+                              return isNaN(parsed.getTime()) ? 'N/A' : format(parsed, 'MMM d, yyyy');
                             } catch (e) {
                               return 'N/A';
                             }
