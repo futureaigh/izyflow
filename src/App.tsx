@@ -338,7 +338,11 @@ export default function App({ auth }: AppProps) {
       try {
         const ws = await api.getWorkspaces();
         setWorkspaces(ws);
-        setActiveWorkspace(current => current ? (ws.find(w => w.id === current.id) || current) : (ws.length > 0 ? ws[0] : null));
+        setActiveWorkspace(current => {
+          if (!current) return ws.length > 0 ? ws[0] : null;
+          const found = ws.find(w => w.id === current.id);
+          return found ? found : (ws.length > 0 ? ws[0] : null);
+        });
       } catch (err) {
         console.error(err);
       }

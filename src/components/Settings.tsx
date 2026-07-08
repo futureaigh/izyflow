@@ -51,6 +51,7 @@ export function Settings({ workspace, user }: SettingsProps) {
   const [onlinePaymentUrl, setOnlinePaymentUrl] = useState(workspace?.onlinePaymentUrl || '');
   const [isDeletingWorkspace, setIsDeletingWorkspace] = useState(false);
   const [deleteWorkspaceConfirm, setDeleteWorkspaceConfirm] = useState('');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [brandColor, setBrandColor] = useState(workspace?.brandColor || '#2563eb');
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>(workspace?.paymentMethods || []);
   const [newPaymentType, setNewPaymentType] = useState<'Bank' | 'Mobile Money' | 'Online'>('Bank');
@@ -267,6 +268,9 @@ export function Settings({ workspace, user }: SettingsProps) {
 
       await api.deleteWorkspace(workspace.id);
       toast.success('Workspace deleted successfully');
+      setDeleteWorkspaceConfirm('');
+      setIsDeletingWorkspace(false);
+      setDeleteDialogOpen(false);
       window.dispatchEvent(new CustomEvent('refresh-workspaces'));
     } catch (error) {
       toast.error('Failed to delete workspace');
@@ -1144,7 +1148,7 @@ export function Settings({ workspace, user }: SettingsProps) {
                     <p className="text-xs text-muted-foreground mb-4">
                       Permanently delete this workspace and all of its data. This action cannot be undone.
                     </p>
-                    <Dialog>
+                    <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
                       <DialogTrigger render={
                         <Button variant="destructive" className="w-full sm:w-auto rounded-xl">
                           <Trash2 className="h-4 w-4 mr-2" />
