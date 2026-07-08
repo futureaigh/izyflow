@@ -322,6 +322,7 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
       toast.success('Invoice copied successfully!', {
         description: `Created a new draft invoice for ${invoice.clientName}`,
       });
+      window.dispatchEvent(new CustomEvent('refresh-data'));
     } catch (error) {
       toast.dismiss(loadingToast);
       console.error('Failed to copy invoice:', error);

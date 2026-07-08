@@ -22,7 +22,7 @@ export default function AccountTransactionsSheet({
   onClose
 }: AccountTransactionsSheetProps) {
   const accountTransactions = transactions.filter(
-    tx => tx.category === account?.name || tx.description?.includes(account?.name || '')
+    tx => tx.accountId === account?.id || (!tx.accountId && (tx.category === account?.name || tx.description?.includes(account?.name || '')))
   );
 
   return (
