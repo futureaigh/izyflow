@@ -141,7 +141,44 @@ export function Dashboard({
     const targetRate = EXCHANGE_RATES[displayCurrency] || 1;
     const sourceRate = EXCHANGE_RATES[sourceCurrency || workspace?.currency || 'GHS'] || 1;
     return baseAmount * (targetRate / sourceRate);
+    return baseAmount * (targetRate / sourceRate);
   };
+
+  // 8. TRUE EXPECTED ACCOUNT BALANCES (calculated from transactions)
+  const computedBalances = useMemo(() => {
+    const map: Record<string, number> = {};
+    accounts.forEach(a => { map[a.id] = 0; });
+
+    transactions.forEach(tx => {
+      const amount = tx.amount || 0;
+      const isOutflow = tx.type === 'Expense' || tx.type === 'Investment';
+      const isInflow = tx.type === 'Income';
+
+      if (tx.accountId === 'auto-allocate') {
+        allocationRules.forEach(rule => {
+          const allocAmount = (amount * rule.percentage) / 100;
+          if (map[rule.targetAccountId] !== undefined) {
+            if (isInflow) map[rule.targetAccountId] += allocAmount;
+            else if (isOutflow) map[rule.targetAccountId] -= allocAmount;
+          }
+        });
+      } else if (tx.accountId && map[tx.accountId] !== undefined) {
+        if (isInflow) map[tx.accountId] += amount;
+        else if (isOutflow) map[tx.accountId] -= amount;
+      } else {
+        const matchedAccount = accounts.find(a => 
+          tx.category === a.name || 
+          tx.description?.toLowerCase().includes(a.name.toLowerCase()) ||
+          tx.payeePayer?.toLowerCase().includes(a.name.toLowerCase())
+        );
+        if (matchedAccount) {
+          if (isInflow) map[matchedAccount.id] += amount;
+          else if (isOutflow) map[matchedAccount.id] -= amount;
+        }
+      }
+    });
+    return map;
+  }, [transactions, accounts, allocationRules]);
 
   useEffect(() => {
     if (!workspace) return;
@@ -312,42 +349,6 @@ export function Dashboard({
   // 7. ACCOUNT BALANCES (Sum of all account balances)
   const sumAccounts = accounts.reduce((sum, a) => sum + convert(a.balance || 0, a.currency as Currency), 0);
   
-  // 8. TRUE EXPECTED ACCOUNT BALANCES (calculated from transactions)
-  const computedBalances = useMemo(() => {
-    const map: Record<string, number> = {};
-    accounts.forEach(a => { map[a.id] = 0; });
-
-    transactions.forEach(tx => {
-      const amount = tx.amount || 0;
-      const isOutflow = tx.type === 'Expense' || tx.type === 'Investment';
-      const isInflow = tx.type === 'Income';
-
-      if (tx.accountId === 'auto-allocate') {
-        allocationRules.forEach(rule => {
-          const allocAmount = (amount * rule.percentage) / 100;
-          if (map[rule.targetAccountId] !== undefined) {
-            if (isInflow) map[rule.targetAccountId] += allocAmount;
-            else if (isOutflow) map[rule.targetAccountId] -= allocAmount;
-          }
-        });
-      } else if (tx.accountId && map[tx.accountId] !== undefined) {
-        if (isInflow) map[tx.accountId] += amount;
-        else if (isOutflow) map[tx.accountId] -= amount;
-      } else {
-        const matchedAccount = accounts.find(a => 
-          tx.category === a.name || 
-          tx.description?.toLowerCase().includes(a.name.toLowerCase()) ||
-          tx.payeePayer?.toLowerCase().includes(a.name.toLowerCase())
-        );
-        if (matchedAccount) {
-          if (isInflow) map[matchedAccount.id] += amount;
-          else if (isOutflow) map[matchedAccount.id] -= amount;
-        }
-      }
-    });
-    return map;
-  }, [transactions, accounts, allocationRules]);
-
   // Mismatch check: Database account balances should equal their true expected computed balances
   const balanceMismatch = accounts.some(a => Math.abs((a.balance || 0) - (computedBalances[a.id] || 0)) > 0.1);
 
