@@ -1137,6 +1137,51 @@ export function Settings({ workspace, user }: SettingsProps) {
                   <Save className="h-4 w-4 mr-2" />
                   Save Workspace Details
                 </Button>
+
+                <div className="pt-8 mt-8 border-t border-border">
+                  <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4">
+                    <h3 className="text-sm font-bold text-red-500 mb-1">Danger Zone</h3>
+                    <p className="text-xs text-muted-foreground mb-4">
+                      Permanently delete this workspace and all of its data. This action cannot be undone.
+                    </p>
+                    <Dialog>
+                      <DialogTrigger render={
+                        <Button variant="destructive" className="w-full sm:w-auto rounded-xl">
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete Workspace
+                        </Button>
+                      } />
+                      <DialogContent className="sm:max-w-[425px] rounded-[2.5rem] border-border bg-card shadow-2xl">
+                        <DialogHeader>
+                          <DialogTitle className="text-red-500 text-2xl font-black">Delete Workspace</DialogTitle>
+                          <p className="text-sm text-muted-foreground mt-2">
+                            This action is permanent and cannot be undone. All data associated with this workspace will be lost.
+                          </p>
+                        </DialogHeader>
+                        <div className="py-4 space-y-4">
+                          <div className="space-y-2">
+                            <Label>Type <span className="font-bold text-foreground">{workspace.name}</span> to confirm</Label>
+                            <Input 
+                              value={deleteWorkspaceConfirm}
+                              onChange={(e) => setDeleteWorkspaceConfirm(e.target.value)}
+                              placeholder="Enter workspace name"
+                            />
+                          </div>
+                        </div>
+                        <DialogFooter>
+                          <Button
+                            variant="destructive"
+                            onClick={handleDeleteWorkspace}
+                            disabled={deleteWorkspaceConfirm !== workspace.name || isDeletingWorkspace}
+                            className="w-full rounded-xl"
+                          >
+                            {isDeletingWorkspace ? "Deleting..." : "I understand, delete this workspace"}
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
