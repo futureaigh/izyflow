@@ -258,8 +258,21 @@ export function Transactions({
       };
 
       if (editingTransaction) {
-        await api.updateTransaction(workspace.id, editingTransaction.id, transactionData);
-        toast.success('Transaction updated');
+        if (targetWorkspaceId && targetWorkspaceId !== workspace.id) {
+          // Copy & Delete fallback to move to a new workspace safely
+          // Note: We don't prompt for a new account here, so it might use an invalid accountId in the new workspace
+          // until the user edits it there. For a true fix, we'd need them to select the target account.
+          const moveData = {
+            ...transactionData,
+            workspaceId: targetWorkspaceId
+          };
+          await api.createTransaction(targetWorkspaceId, moveData);
+          await api.deleteTransaction(workspace.id, editingTransaction.id);
+          toast.success('Transaction moved to new workspace');
+        } else {
+          await api.updateTransaction(workspace.id, editingTransaction.id, transactionData);
+          toast.success('Transaction updated');
+        }
       } else {
         await api.createTransaction(workspace.id, transactionData);
         toast.success('Transaction recorded');

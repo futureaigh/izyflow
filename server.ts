@@ -494,6 +494,32 @@ async function startServer() {
     }
   });
 
+  app.delete("/api/workspaces/:id", requireAuthMiddleware(), async (req: any, res) => {
+    const { id } = req.params;
+    const userId = req.auth.userId;
+    try {
+      // Cascade delete child tables first
+      await db.delete(accounts).where(eq(accounts.workspaceId, id));
+      await db.delete(allocationRules).where(eq(allocationRules.workspaceId, id));
+      await db.delete(transactions).where(eq(transactions.workspaceId, id));
+      await db.delete(invoices).where(eq(invoices.workspaceId, id));
+      await db.delete(catalogItems).where(eq(catalogItems.workspaceId, id));
+      await db.delete(pricingCalculations).where(eq(pricingCalculations.workspaceId, id));
+      await db.delete(contacts).where(eq(contacts.workspaceId, id));
+      await db.delete(staff).where(eq(staff.workspaceId, id));
+      await db.delete(staffReceipts).where(eq(staffReceipts.workspaceId, id));
+
+      // Delete the workspace itself
+      await db.delete(workspaces).where(eq(workspaces.id, id));
+
+      await invalidateCache(buildCacheKey("user", userId, "workspaces"));
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Error in DELETE /api/workspaces/:id:", err);
+      res.status(500).json({ error: "Failed to delete workspace" });
+    }
+  });
+
   // --- ACCOUNTS ENDPOINTS ---
   app.get("/api/workspaces/:workspaceId/accounts", requireAuthMiddleware(), async (req, res) => {
     const { workspaceId } = req.params;

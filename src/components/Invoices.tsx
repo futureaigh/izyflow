@@ -254,8 +254,19 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
       };
 
       if (editingInvoice) {
-        await api.updateInvoice(workspace.id, editingInvoice.id, invoiceData);
-        toast.success('Invoice updated');
+        if (targetWorkspaceId && targetWorkspaceId !== workspace.id) {
+          // Copy & Delete fallback to move to a new workspace safely
+          const moveData = {
+            ...invoiceData,
+            workspaceId: targetWorkspaceId
+          };
+          await api.createInvoice(targetWorkspaceId, moveData);
+          await api.deleteInvoice(workspace.id, editingInvoice.id);
+          toast.success('Invoice moved to new workspace');
+        } else {
+          await api.updateInvoice(workspace.id, editingInvoice.id, invoiceData);
+          toast.success('Invoice updated');
+        }
       } else {
         const id = crypto.randomUUID();
         await api.createInvoice(workspace.id, {
