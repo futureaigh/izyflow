@@ -24,6 +24,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 
 interface TransactionsProps {
   workspace: Workspace | null;
+  workspaces?: Workspace[];
   user: UserProfile | null;
   initialFilters?: any;
   transactions: Transaction[];
@@ -35,6 +36,7 @@ interface TransactionsProps {
 
 export function Transactions({ 
   workspace, 
+  workspaces,
   user, 
   initialFilters,
   transactions: propTransactions,
@@ -83,6 +85,7 @@ export function Transactions({
   const [isLoan, setIsLoan] = useState(false);
   const [loanStatus, setLoanStatus] = useState<'Loan' | 'Repayment'>('Loan');
   const [accountId, setAccountId] = useState('');
+  const [targetWorkspaceId, setTargetWorkspaceId] = useState('');
   const [allocationRules, setAllocationRules] = useState<AllocationRule[]>([]);
   const [selectedTransactions, setSelectedTransactions] = useState<string[]>([]);
   const [isDeletingBulk, setIsDeletingBulk] = useState(false);
@@ -146,16 +149,19 @@ export function Transactions({
       setIsLoan(editingTransaction.isLoan || false);
       setLoanStatus(editingTransaction.loanStatus || 'Loan');
       setAccountId(editingTransaction.accountId || '');
+      setTargetWorkspaceId(editingTransaction.workspaceId || workspace?.id || '');
     } else {
       setType('Income');
       setAmount('');
       setCategory('');
       setDescription('');
       setPayeePayer('');
-      setDate(new Date().toISOString().split('T')[0]);
-      setTime(new Date().toTimeString().split(' ')[0].slice(0, 5));
+      setDate(format(new Date(), 'yyyy-MM-dd'));
+      setTime(format(new Date(), 'HH:mm'));
       setIsLoan(false);
       setLoanStatus('Loan');
+      setAccountId('');
+      setTargetWorkspaceId(workspace?.id || '');
       
       // Set default account if available
       const defaultAcc = accounts.find(a => a.isDefault);
@@ -163,7 +169,7 @@ export function Transactions({
       else if (accounts.length > 0) setAccountId(accounts[0].id);
       else setAccountId('');
     }
-  }, [editingTransaction, accounts]);
+  }, [editingTransaction, accounts, workspace]);
 
   // Auto-classification logic
   useEffect(() => {
@@ -235,7 +241,7 @@ export function Transactions({
       
       const transactionData = {
         id: editingTransaction ? editingTransaction.id : (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2)),
-        workspaceId: workspace.id,
+        workspaceId: targetWorkspaceId || workspace.id,
         type,
         amount: amountNum,
         currency: workspace.currency,
@@ -697,7 +703,23 @@ export function Transactions({
                     ))}
                   </select>
                 </div>
-                <div className="space-y-2">
+                  
+                  {editingTransaction && workspaces && workspaces.length > 1 && (
+                    <div className="space-y-2">
+                      <Label className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Workspace (Move)</Label>
+                      <select 
+                        className="w-full rounded-xl border border-border bg-background px-3 h-12 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                        value={targetWorkspaceId}
+                        onChange={(e) => setTargetWorkspaceId(e.target.value)}
+                      >
+                        {workspaces.map(ws => (
+                          <option key={ws.id} value={ws.id}>{ws.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-4">
                   <Label className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Category</Label>
                   <select 
                     className="w-full rounded-xl border border-border bg-background px-3 h-12 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"

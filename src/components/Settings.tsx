@@ -8,6 +8,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from './ui/dialog';
 import { Plus, Trash2, Save, Percent, Wallet, Info, Settings as SettingsIcon, CreditCard, Zap, Image as ImageIcon, Tag, User as UserIcon, ChevronDown, ChevronUp, Sparkles, Check, X, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { UserProfile } from '../types';
@@ -48,6 +49,8 @@ export function Settings({ workspace, user }: SettingsProps) {
   const [mobileMoneyProvider, setMobileMoneyProvider] = useState(workspace?.mobileMoneyProvider || '');
   const [mobileMoneyNumber, setMobileMoneyNumber] = useState(workspace?.mobileMoneyNumber || '');
   const [onlinePaymentUrl, setOnlinePaymentUrl] = useState(workspace?.onlinePaymentUrl || '');
+  const [isDeletingWorkspace, setIsDeletingWorkspace] = useState(false);
+  const [deleteWorkspaceConfirm, setDeleteWorkspaceConfirm] = useState('');
   const [brandColor, setBrandColor] = useState(workspace?.brandColor || '#2563eb');
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>(workspace?.paymentMethods || []);
   const [newPaymentType, setNewPaymentType] = useState<'Bank' | 'Mobile Money' | 'Online'>('Bank');
@@ -250,6 +253,24 @@ export function Settings({ workspace, user }: SettingsProps) {
       fetchAccounts();
     } catch (error) {
       toast.error('Failed to update currency');
+    }
+  };
+
+  const handleDeleteWorkspace = async () => {
+    if (!workspace) return;
+    if (deleteWorkspaceConfirm !== workspace.name) {
+      toast.error('Workspace name does not match');
+      return;
+    }
+    try {
+      setIsDeletingWorkspace(true);
+
+      await api.deleteWorkspace(workspace.id);
+      toast.success('Workspace deleted successfully');
+      window.dispatchEvent(new CustomEvent('refresh-workspaces'));
+    } catch (error) {
+      toast.error('Failed to delete workspace');
+      setIsDeletingWorkspace(false);
     }
   };
 

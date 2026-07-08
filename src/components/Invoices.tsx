@@ -21,6 +21,7 @@ import { api } from '../lib/api';
 
 interface InvoicesProps {
   workspace: Workspace | null;
+  workspaces?: Workspace[];
   initialFilters?: {
     status?: string;
     search?: string;
@@ -34,6 +35,7 @@ interface InvoicesProps {
 
 export function Invoices({ 
   workspace, 
+  workspaces,
   initialFilters,
   invoices: propInvoices,
   accounts: propAccounts,
@@ -65,6 +67,7 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
   const [clientEmail, setClientEmail] = useState('');
   const [clientPhone, setClientPhone] = useState('');
   const [title, setTitle] = useState('');
+  const [targetWorkspaceId, setTargetWorkspaceId] = useState('');
   const [introduction, setIntroduction] = useState('');
   const [items, setItems] = useState<InvoiceItem[]>([{ name: '', description: '', quantity: 1, price: 0 }]);
   const [dueDate, setDueDate] = useState('');
@@ -232,6 +235,7 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
       const discountValNum = Number(discountValue) || 0;
 
       const invoiceData = {
+        workspaceId: targetWorkspaceId || workspace.id,
         clientName: clientName.trim(),
         clientBusinessName: clientBusinessName.trim(),
         clientEmail: clientEmail.trim(),
@@ -277,6 +281,7 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
   };
 
   const resetForm = () => {
+    setTargetWorkspaceId(workspace?.id || '');
     setClientName('');
     setClientBusinessName('');
     setClientEmail('');
@@ -332,6 +337,7 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
   };
 
   const startEditing = (invoice: Invoice) => {
+    setTargetWorkspaceId(invoice.workspaceId || workspace?.id || '');
     setEditingInvoice(invoice);
     setClientName(invoice.clientName);
     setClientBusinessName(invoice.clientBusinessName || '');
@@ -1533,3 +1539,5 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
     </div>
   );
 }
+
+
