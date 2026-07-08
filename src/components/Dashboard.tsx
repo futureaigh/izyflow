@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { EXCHANGE_RATES } from '../constants';
 import { Workspace, Transaction, Account, Invoice, Currency, AllocationRule } from '../types';
 import { cn, parseLocalDate } from '../lib/utils';
@@ -312,38 +312,53 @@ export function Dashboard({
   // 7. ACCOUNT BALANCES (Sum of all account balances)
   const sumAccounts = accounts.reduce((sum, a) => sum + convert(a.balance || 0, a.currency as Currency), 0);
   
-  // Mismatch check: Account balances should equal All Time Net Flow
-  const balanceMismatch = Math.abs(sumAccounts - allTimeNet) > 0.1;
+  // 8. TRUE EXPECTED ACCOUNT BALANCES (calculated from transactions)
+  const computedBalances = useMemo(() => {
+    const map: Record<string, number> = {};
+    accounts.forEach(a => { map[a.id] = 0; });
+
+    transactions.forEach(tx => {
+      const amount = tx.amount || 0;
+      const isOutflow = tx.type === 'Expense' || tx.type === 'Investment';
+      const isInflow = tx.type === 'Income';
+
+      if (tx.accountId === 'auto-allocate') {
+        allocationRules.forEach(rule => {
+          const allocAmount = (amount * rule.percentage) / 100;
+          if (map[rule.targetAccountId] !== undefined) {
+            if (isInflow) map[rule.targetAccountId] += allocAmount;
+            else if (isOutflow) map[rule.targetAccountId] -= allocAmount;
+          }
+        });
+      } else if (tx.accountId && map[tx.accountId] !== undefined) {
+        if (isInflow) map[tx.accountId] += amount;
+        else if (isOutflow) map[tx.accountId] -= amount;
+      } else {
+        const matchedAccount = accounts.find(a => 
+          tx.category === a.name || 
+          tx.description?.toLowerCase().includes(a.name.toLowerCase()) ||
+          tx.payeePayer?.toLowerCase().includes(a.name.toLowerCase())
+        );
+        if (matchedAccount) {
+          if (isInflow) map[matchedAccount.id] += amount;
+          else if (isOutflow) map[matchedAccount.id] -= amount;
+        }
+      }
+    });
+    return map;
+  }, [transactions, accounts, allocationRules]);
+
+  // Mismatch check: Database account balances should equal their true expected computed balances
+  const balanceMismatch = accounts.some(a => Math.abs((a.balance || 0) - (computedBalances[a.id] || 0)) > 0.1);
 
   const syncBalances = async () => {
     if (!workspace) return;
     const toastId = toast.loading('Synchronizing account balances...');
     
     try {
-      // 1. Calculate real balances from transactions using fuzzy match logic
-      const map: Record<string, number> = {};
-      accounts.forEach(a => { map[a.id] = 0; });
-
-      transactions.forEach(tx => {
-        const matchedAccount = accounts.find(a => 
-          tx.category === a.name || 
-          tx.description?.toLowerCase().includes(a.name.toLowerCase()) ||
-          tx.payeePayer?.toLowerCase().includes(a.name.toLowerCase())
-        );
-        
-        const amount = tx.amount || 0;
-        const isOutflow = tx.type === 'Expense' || tx.type === 'Investment';
-        const isInflow = tx.type === 'Income';
-
-        if (matchedAccount) {
-          if (isInflow) map[matchedAccount.id] = (map[matchedAccount.id] || 0) + amount;
-          else if (isOutflow) map[matchedAccount.id] = (map[matchedAccount.id] || 0) - amount;
-        }
-      });
-
-      // 2. Update backend via API
+      // Update backend via API using mathematically computed balances
       const promises = accounts.map(a => {
-        const newBalance = map[a.id] || 0;
+        const newBalance = computedBalances[a.id] || 0;
         if (Math.abs(newBalance - (a.balance || 0)) > 0.01) {
           return api.updateAccount(workspace.id, a.id, { balance: newBalance });
         }
@@ -353,7 +368,7 @@ export function Dashboard({
       await Promise.all(promises);
       toast.success('Account balances synchronized', { id: toastId });
       
-      // 3. Trigger UI refresh
+      // Trigger UI refresh
       window.dispatchEvent(new CustomEvent('refresh-data'));
     } catch (error) {
       console.error('Sync error:', error);
@@ -734,7 +749,7 @@ export function Dashboard({
             </div>
             <div>
               <p className="text-sm font-bold text-rose-900">Financial Mismatch Detected</p>
-              <p className="text-xs text-rose-700">Your account balances ({displayCurrency} {convert(sumAccounts).toLocaleString()}) don't match your transaction history ({displayCurrency} {convert(allTimeNet).toLocaleString()}).</p>
+              <p className="text-xs text-rose-700">One or more of your account balances don't match their transaction history. Sync to correct.</p>
             </div>
           </div>
           <div className="flex items-center gap-2">

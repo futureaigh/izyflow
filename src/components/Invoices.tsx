@@ -56,6 +56,7 @@ export function Invoices({
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [paymentAmount, setPaymentAmount] = useState<string>('');
 const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [paymentAccountId, setPaymentAccountId] = useState<string>('');
   const [scenario, setScenario] = useState('');
   
   // New/Edit Invoice State
@@ -371,14 +372,10 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
     setIsSubmitting(true);
 
     try {
-      const accounts = propAccounts;
-      const rules = propRules;
-      const defaultAccount = accounts.find(a => a.isDefault) || accounts[0];
-
       await api.recordPayment(workspace.id, editingInvoice.id, {
         amount: amountNum,
         date: paymentDate,
-        accountId: rules.length > 0 ? 'auto-allocate' : (defaultAccount?.id || ''),
+        accountId: paymentAccountId,
       });
 
       toast.success('Payment Recorded Successfully', {
@@ -1160,6 +1157,20 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
                     Total Due: {workspace.currency} {((editingInvoice?.amount || 0) - (editingInvoice?.paidAmount || 0)).toLocaleString()}
                   </p>
                 </div>
+                <div className="space-y-2 mt-4">
+                  <Label className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Destination Account</Label>
+                  <select 
+                    className="w-full h-14 px-4 rounded-2xl border-border bg-background text-sm font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    value={paymentAccountId}
+                    onChange={(e) => setPaymentAccountId(e.target.value)}
+                  >
+                    {propRules.length > 0 && <option value="auto-allocate">✨ Auto-allocate (Revenue Splitter)</option>}
+                    {propAccounts.map(acc => (
+                      <option key={acc.id} value={acc.id}>{acc.name}</option>
+                    ))}
+                    <option value="">Leave Unallocated</option>
+                  </select>
+                </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsRecordingPayment(false)} className="rounded-xl h-12 px-6">Cancel</Button>
@@ -1376,6 +1387,7 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
                             onClick={() => {
                               setEditingInvoice(invoice);
                               setPaymentAmount(((invoice.amount || 0) - (invoice.paidAmount || 0)).toString());
+                              setPaymentAccountId(propRules.length > 0 ? 'auto-allocate' : (propAccounts.find(a => a.isDefault)?.id || propAccounts[0]?.id || ''));
                               setIsRecordingPayment(true);
                             }}
                             className="h-9 w-9 text-emerald-600 hover:bg-emerald-50/50 rounded-xl"
