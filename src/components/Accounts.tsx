@@ -10,6 +10,7 @@ import { Input } from './ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog';
 import { Label } from './ui/label';
 import { Switch } from './ui/switch';
+import { ScrollArea } from './ui/scroll-area';
 import { cn, parseLocalDate } from '../lib/utils';
 import { toast } from 'sonner';
 import { 
@@ -53,6 +54,31 @@ export function Accounts({
   const [form, setForm] = useState({ name: '', isDefault: false });
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
   const [period, setPeriod] = useState<Period>('all');
+  const [isResolverOpen, setIsResolverOpen] = useState(false);
+  const [resolverSubmittingId, setResolverSubmittingId] = useState<string | null>(null);
+
+  const unallocatedTransactions = useMemo(() => {
+    return transactions.filter(t => !t.accountId);
+  }, [transactions]);
+
+  const handleAllocateFund = async (transactionId: string, targetAccountId: string) => {
+    if (!workspace) return;
+    setResolverSubmittingId(transactionId);
+    try {
+      const tx = transactions.find(t => t.id === transactionId);
+      if (!tx) return;
+      await api.updateTransaction(workspace.id, transactionId, {
+        ...tx,
+        accountId: targetAccountId
+      });
+      toast.success('Funds allocated successfully');
+      window.dispatchEvent(new CustomEvent('refresh-data'));
+    } catch (error) {
+      toast.error('Failed to allocate funds');
+    } finally {
+      setResolverSubmittingId(null);
+    }
+  };
 
   useEffect(() => {
     if (!workspace) return;
@@ -399,12 +425,21 @@ export function Accounts({
           </div>
         ))}
 
-        {unallocatedBalance !== 0 && (
+        {(unallocatedBalance !== 0 || unallocatedTransactions.length > 0) && (
           <div className="bg-muted/10 rounded-3xl border border-dashed border-border p-6 relative overflow-hidden flex flex-col">
             <div className="flex items-start justify-between mb-6">
               <div className="h-12 w-12 rounded-2xl bg-muted flex items-center justify-center border border-border">
                 <Wallet className="h-6 w-6 text-muted-foreground opacity-30" />
               </div>
+              {unallocatedTransactions.length > 0 && (
+                <Button 
+                  onClick={() => setIsResolverOpen(true)}
+                  variant="outline" 
+                  className="bg-purple-500/10 text-purple-600 hover:bg-purple-500/20 border-purple-200 shadow-sm"
+                >
+                  Allocate Funds
+                </Button>
+              )}
             </div>
             <div className="space-y-1">
               <h3 className="text-xl font-black text-muted-foreground/70 tracking-tight">Unallocated Cash</h3>
@@ -485,6 +520,62 @@ export function Accounts({
             <Button onClick={handleSave}>
               Save Account
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Unallocated Resolver Dialog */}
+      <Dialog open={isResolverOpen} onOpenChange={setIsResolverOpen}>
+        <DialogContent className="sm:max-w-2xl bg-popover border-border text-popover-foreground">
+          <DialogHeader>
+            <DialogTitle className="text-foreground">Allocate Funds</DialogTitle>
+            <p className="text-sm text-muted-foreground">Assign unallocated transactions to your accounts.</p>
+          </DialogHeader>
+          <ScrollArea className="max-h-[60vh] pr-4">
+            <div className="space-y-4 py-4">
+              {unallocatedTransactions.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">No unallocated funds!</div>
+              ) : (
+                unallocatedTransactions.map(tx => (
+                  <div key={tx.id} className="flex items-center justify-between p-4 rounded-xl border border-border bg-card">
+                    <div>
+                      <p className="font-bold text-foreground">{tx.description || tx.category || 'Incoming Payment'}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {workspace?.currency} {tx.amount.toLocaleString()} • {(() => {
+                          try {
+                            const tDate = parseLocalDate(tx.date);
+                            if (isNaN(tDate.getTime())) return tx.date || 'N/A';
+                            return format(tDate, 'MMM d, yyyy');
+                          } catch (e) {
+                            return tx.date || 'N/A';
+                          }
+                        })()}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <select 
+                        className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring text-foreground"
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            handleAllocateFund(tx.id, e.target.value);
+                          }
+                        }}
+                        disabled={resolverSubmittingId === tx.id}
+                        value=""
+                      >
+                        <option value="" disabled>Select Account...</option>
+                        {accounts.map(acc => (
+                          <option key={acc.id} value={acc.id}>{acc.name}</option>
+                        ))}
+                      </select>
+                      {resolverSubmittingId === tx.id && <Loader2 className="h-4 w-4 animate-spin text-purple-500" />}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </ScrollArea>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsResolverOpen(false)}>Done</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
