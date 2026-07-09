@@ -9,6 +9,7 @@ import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, LineChart, Line } from 'recharts';
 import { exportToCSV, exportToPDF } from '../lib/dataEngine';
+import { platformDocumentation } from '../lib/platform-docs';
 
 interface IzyAssistantProps {
   workspace: Workspace | null;
@@ -222,8 +223,11 @@ export function IzyAssistant({ workspace, user, transactions, invoices, accounts
         2. DATA ENTRY: If the user provides details of a new transaction, use 'proposeTransaction' immediately.
         3. SEARCH & SUM: When asked about spending or income (e.g., "How much did I give to mum?"), filter and sum the amounts from the DATA above. Look for keywords in descriptions.
         4. TECHNICAL SUPPORT HANDOFF: If the user asks technical questions (e.g., "Why is the app slow?", "How do I change my password?", "Reset my account"), STOP and say: "I specialize in managing your financial records. For technical help or billing issues, please contact our human support team directly here: https://wa.me/233507750048"
-        5. CONSTRAINTS: Only answer based on the provided data. Do not guess or hallucinate.
+        5. CONSTRAINTS: Only answer based on the provided data and documentation. Do not guess or hallucinate.
         6. BE CONCISE: Direct answers are best.
+        
+        PLATFORM DOCUMENTATION & TUTORIALS:
+        ${platformDocumentation}
         
         Stay objective. You are Izy.
       `;
