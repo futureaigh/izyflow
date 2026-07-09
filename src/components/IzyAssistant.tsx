@@ -80,6 +80,41 @@ interface PendingPreferenceUpdate {
   updates: Partial<UserProfile['preferences']>;
 }
 
+interface PendingCatalogItem {
+  name: string;
+  description?: string;
+  price: number;
+  type: string;
+  category?: string;
+  currency?: string;
+}
+
+interface PendingContact {
+  name: string;
+  email?: string;
+  phone?: string;
+  type: string;
+}
+
+interface PendingInvoicePayment {
+  invoiceId: string;
+  amountPaid: number;
+}
+
+interface PendingAllocationRule {
+  name: string;
+  percentage: number;
+  targetAccountId: string;
+}
+
+interface PendingStaffReceipt {
+  recipientName: string;
+  title: string;
+  amount: number;
+  paymentMethod: string;
+  currency?: string;
+}
+
 interface Message {
   role: 'user' | 'assistant';
   content: string;
@@ -92,6 +127,11 @@ interface Message {
   pendingAccountUpdate?: PendingAccountUpdate;
   pendingAccountCreation?: PendingAccountCreation;
   pendingPreferenceUpdate?: PendingPreferenceUpdate;
+  pendingCatalogItem?: PendingCatalogItem;
+  pendingContact?: PendingContact;
+  pendingInvoicePayment?: PendingInvoicePayment;
+  pendingAllocationRule?: PendingAllocationRule;
+  pendingStaffReceipt?: PendingStaffReceipt;
 }
 
 export function IzyAssistant({ workspace, user, transactions, invoices, accounts, isOpen, onClose, period = 'this-month', initialScenario }: IzyAssistantProps) {
@@ -269,6 +309,76 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
                     currency: { type: Type.STRING, description: "The currency of the account (e.g. USD, GHS)" }
                   },
                   required: ["name", "initialBalance"]
+                }
+              },
+              {
+                name: "proposeCatalogItem",
+                description: "Propose creating a new product or service for the catalog.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: {
+                    name: { type: Type.STRING, description: "Name of the product or service" },
+                    description: { type: Type.STRING, description: "Brief description" },
+                    price: { type: Type.NUMBER, description: "Price of the item" },
+                    type: { type: Type.STRING, enum: ["Product", "Service"], description: "Whether it is a product or a service" },
+                    category: { type: Type.STRING, description: "Category of the item" },
+                    currency: { type: Type.STRING, description: "Currency for the price" }
+                  },
+                  required: ["name", "price", "type"]
+                }
+              },
+              {
+                name: "proposeContact",
+                description: "Propose creating a new client, vendor, or contact.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: {
+                    name: { type: Type.STRING, description: "Name of the contact" },
+                    email: { type: Type.STRING, description: "Email address" },
+                    phone: { type: Type.STRING, description: "Phone number" },
+                    type: { type: Type.STRING, enum: ["Client", "Vendor", "Other"], description: "Type of contact" }
+                  },
+                  required: ["name", "type"]
+                }
+              },
+              {
+                name: "proposeInvoicePayment",
+                description: "Propose recording a payment against an existing invoice. You must extract the exact invoice ID or a partial identifier if possible.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: {
+                    invoiceId: { type: Type.STRING, description: "The ID of the invoice being paid" },
+                    amountPaid: { type: Type.NUMBER, description: "The amount paid towards the invoice" }
+                  },
+                  required: ["invoiceId", "amountPaid"]
+                }
+              },
+              {
+                name: "proposeAllocationRule",
+                description: "Propose creating an automatic allocation rule to split income.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: {
+                    name: { type: Type.STRING, description: "Name of the rule (e.g., Tax Allocation)" },
+                    percentage: { type: Type.NUMBER, description: "Percentage to allocate (0-100)" },
+                    targetAccountId: { type: Type.STRING, description: "The exact name or ID of the destination account" }
+                  },
+                  required: ["name", "percentage", "targetAccountId"]
+                }
+              },
+              {
+                name: "proposeStaffReceipt",
+                description: "Propose recording a staff payroll payment, salary, or receipt.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: {
+                    recipientName: { type: Type.STRING, description: "Name of the staff member" },
+                    title: { type: Type.STRING, description: "Title of the payment (e.g. October Salary)" },
+                    amount: { type: Type.NUMBER, description: "Amount paid" },
+                    paymentMethod: { type: Type.STRING, enum: ["Cash", "Bank Transfer", "Mobile Money", "Other"], description: "Method of payment" },
+                    currency: { type: Type.STRING, description: "Currency of payment" }
+                  },
+                  required: ["recipientName", "title", "amount", "paymentMethod"]
                 }
               },
               {
@@ -457,6 +567,66 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
             pendingAccountCreation: {
               name: args.name,
               initialBalance: args.initialBalance,
+              currency: args.currency
+            }
+          }]);
+        } else if (call.name === 'proposeCatalogItem') {
+          const args = call.args as any;
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `I've prepared a new catalog item. Please review the details:`,
+            pendingCatalogItem: {
+              name: args.name,
+              description: args.description,
+              price: args.price,
+              type: args.type,
+              category: args.category,
+              currency: args.currency
+            }
+          }]);
+        } else if (call.name === 'proposeContact') {
+          const args = call.args as any;
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `I've prepared a new contact record. Please review the details:`,
+            pendingContact: {
+              name: args.name,
+              email: args.email,
+              phone: args.phone,
+              type: args.type
+            }
+          }]);
+        } else if (call.name === 'proposeInvoicePayment') {
+          const args = call.args as any;
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `I've prepared a payment record for the invoice. Please review the details:`,
+            pendingInvoicePayment: {
+              invoiceId: args.invoiceId,
+              amountPaid: args.amountPaid
+            }
+          }]);
+        } else if (call.name === 'proposeAllocationRule') {
+          const args = call.args as any;
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `I've prepared a new auto-allocation rule. Please review the details:`,
+            pendingAllocationRule: {
+              name: args.name,
+              percentage: args.percentage,
+              targetAccountId: args.targetAccountId
+            }
+          }]);
+        } else if (call.name === 'proposeStaffReceipt') {
+          const args = call.args as any;
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `I've prepared a new staff payment record. Please review the details:`,
+            pendingStaffReceipt: {
+              recipientName: args.recipientName,
+              title: args.title,
+              amount: args.amount,
+              paymentMethod: args.paymentMethod,
               currency: args.currency
             }
           }]);
@@ -668,6 +838,110 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
     } catch (error) {
       console.error('Error creating account:', error);
       toast.error('Failed to create account');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const confirmCatalogItem = async (item: PendingCatalogItem, index: number) => {
+    if (!workspace) return;
+    setIsLoading(true);
+    try {
+      await api.createCatalogItem(workspace.id, {
+        name: item.name,
+        description: item.description || '',
+        price: Number(item.price) || 0,
+        type: item.type,
+        category: item.category || 'General',
+        currency: item.currency || workspace.currency
+      });
+      toast.success("Catalog item added!");
+      window.dispatchEvent(new CustomEvent('refresh-data'));
+      setMessages(prev => prev.map((msg, i) => i === index ? { ...msg, content: "Catalog item added! ✅", pendingCatalogItem: undefined } : msg));
+    } catch (error) {
+      toast.error('Failed to add catalog item');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const confirmContact = async (contact: PendingContact, index: number) => {
+    if (!workspace) return;
+    setIsLoading(true);
+    try {
+      await api.createContact(workspace.id, {
+        name: contact.name,
+        email: contact.email || '',
+        phone: contact.phone || '',
+        type: contact.type
+      });
+      toast.success("Contact saved!");
+      window.dispatchEvent(new CustomEvent('refresh-data'));
+      setMessages(prev => prev.map((msg, i) => i === index ? { ...msg, content: "Contact saved! ✅", pendingContact: undefined } : msg));
+    } catch (error) {
+      toast.error('Failed to save contact');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const confirmInvoicePayment = async (payment: PendingInvoicePayment, index: number) => {
+    if (!workspace) return;
+    setIsLoading(true);
+    try {
+      await api.recordPayment(workspace.id, payment.invoiceId, {
+        amount: Number(payment.amountPaid),
+        date: new Date().toISOString().split('T')[0]
+      });
+      toast.success("Payment recorded!");
+      window.dispatchEvent(new CustomEvent('refresh-data'));
+      setMessages(prev => prev.map((msg, i) => i === index ? { ...msg, content: "Payment recorded! ✅", pendingInvoicePayment: undefined } : msg));
+    } catch (error) {
+      toast.error('Failed to record payment');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const confirmAllocationRule = async (rule: PendingAllocationRule, index: number) => {
+    if (!workspace) return;
+    setIsLoading(true);
+    try {
+      await api.createAllocationRule(workspace.id, {
+        name: rule.name,
+        percentage: Number(rule.percentage),
+        targetAccountId: rule.targetAccountId,
+        isActive: true
+      });
+      toast.success("Allocation rule created!");
+      window.dispatchEvent(new CustomEvent('refresh-data'));
+      setMessages(prev => prev.map((msg, i) => i === index ? { ...msg, content: "Allocation rule created! ✅", pendingAllocationRule: undefined } : msg));
+    } catch (error) {
+      toast.error('Failed to create rule');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const confirmStaffReceipt = async (receipt: PendingStaffReceipt, index: number) => {
+    if (!workspace) return;
+    setIsLoading(true);
+    try {
+      await api.createStaffReceipt(workspace.id, {
+        recipientName: receipt.recipientName,
+        title: receipt.title,
+        amount: Number(receipt.amount),
+        currency: receipt.currency || workspace.currency,
+        paymentMethod: receipt.paymentMethod,
+        date: new Date().toISOString().split('T')[0],
+        status: 'Paid',
+        items: [{ description: receipt.title, amount: Number(receipt.amount) }]
+      });
+      toast.success("Staff payment recorded!");
+      window.dispatchEvent(new CustomEvent('refresh-data'));
+      setMessages(prev => prev.map((msg, i) => i === index ? { ...msg, content: "Staff payment recorded! ✅", pendingStaffReceipt: undefined } : msg));
+    } catch (error) {
+      toast.error('Failed to record staff payment');
     } finally {
       setIsLoading(false);
     }
@@ -1145,6 +1419,176 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
                       >
                         {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
                         Confirm Account
+                      </button>
+                    </motion.div>
+                  )}
+                  {m.pendingCatalogItem && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-card border border-teal-600/30 rounded-xl overflow-hidden shadow-xl"
+                    >
+                      <div className="p-4 space-y-3 bg-teal-50/90">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded bg-teal-600 text-white shadow-sm">
+                            NEW CATALOG ITEM
+                          </span>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-xs">
+                            <span className="font-bold text-slate-600 uppercase">Item Name:</span>
+                            <span className="text-slate-900">{m.pendingCatalogItem.name}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="font-bold text-slate-600 uppercase">Price:</span>
+                            <span className="text-slate-900">{m.pendingCatalogItem.currency || workspace?.currency} {m.pendingCatalogItem.price}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="font-bold text-slate-600 uppercase">Type:</span>
+                            <span className="text-slate-900">{m.pendingCatalogItem.type}</span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <button 
+                        onClick={() => confirmCatalogItem(m.pendingCatalogItem!, i)}
+                        disabled={isLoading}
+                        className="w-full p-3 bg-teal-600 hover:bg-teal-700 text-white text-xs font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
+                      >
+                        {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                        Save Catalog Item
+                      </button>
+                    </motion.div>
+                  )}
+                  {m.pendingContact && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-card border border-orange-600/30 rounded-xl overflow-hidden shadow-xl"
+                    >
+                      <div className="p-4 space-y-3 bg-orange-50/90">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded bg-orange-600 text-white shadow-sm">
+                            NEW CONTACT
+                          </span>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-xs">
+                            <span className="font-bold text-slate-600 uppercase">Name:</span>
+                            <span className="text-slate-900">{m.pendingContact.name}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="font-bold text-slate-600 uppercase">Type:</span>
+                            <span className="text-slate-900">{m.pendingContact.type}</span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <button 
+                        onClick={() => confirmContact(m.pendingContact!, i)}
+                        disabled={isLoading}
+                        className="w-full p-3 bg-orange-600 hover:bg-orange-700 text-white text-xs font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
+                      >
+                        {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                        Save Contact
+                      </button>
+                    </motion.div>
+                  )}
+                  {m.pendingInvoicePayment && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-card border border-cyan-600/30 rounded-xl overflow-hidden shadow-xl"
+                    >
+                      <div className="p-4 space-y-3 bg-cyan-50/90">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded bg-cyan-600 text-white shadow-sm">
+                            RECORD INVOICE PAYMENT
+                          </span>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-xs">
+                            <span className="font-bold text-slate-600 uppercase">Amount Paid:</span>
+                            <span className="text-slate-900">{workspace?.currency} {m.pendingInvoicePayment.amountPaid}</span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <button 
+                        onClick={() => confirmInvoicePayment(m.pendingInvoicePayment!, i)}
+                        disabled={isLoading}
+                        className="w-full p-3 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
+                      >
+                        {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                        Record Payment
+                      </button>
+                    </motion.div>
+                  )}
+                  {m.pendingAllocationRule && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-card border border-fuchsia-600/30 rounded-xl overflow-hidden shadow-xl"
+                    >
+                      <div className="p-4 space-y-3 bg-fuchsia-50/90">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded bg-fuchsia-600 text-white shadow-sm">
+                            NEW ALLOCATION RULE
+                          </span>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-xs">
+                            <span className="font-bold text-slate-600 uppercase">Rule Name:</span>
+                            <span className="text-slate-900">{m.pendingAllocationRule.name}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="font-bold text-slate-600 uppercase">Percentage:</span>
+                            <span className="text-slate-900">{m.pendingAllocationRule.percentage}%</span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <button 
+                        onClick={() => confirmAllocationRule(m.pendingAllocationRule!, i)}
+                        disabled={isLoading}
+                        className="w-full p-3 bg-fuchsia-600 hover:bg-fuchsia-700 text-white text-xs font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
+                      >
+                        {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                        Create Rule
+                      </button>
+                    </motion.div>
+                  )}
+                  {m.pendingStaffReceipt && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-card border border-violet-600/30 rounded-xl overflow-hidden shadow-xl"
+                    >
+                      <div className="p-4 space-y-3 bg-violet-50/90">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded bg-violet-600 text-white shadow-sm">
+                            STAFF PAYMENT
+                          </span>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-xs">
+                            <span className="font-bold text-slate-600 uppercase">Recipient:</span>
+                            <span className="text-slate-900">{m.pendingStaffReceipt.recipientName}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="font-bold text-slate-600 uppercase">Amount:</span>
+                            <span className="text-slate-900">{m.pendingStaffReceipt.currency || workspace?.currency} {m.pendingStaffReceipt.amount}</span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <button 
+                        onClick={() => confirmStaffReceipt(m.pendingStaffReceipt!, i)}
+                        disabled={isLoading}
+                        className="w-full p-3 bg-violet-600 hover:bg-violet-700 text-white text-xs font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
+                      >
+                        {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                        Record Payment
                       </button>
                     </motion.div>
                   )}

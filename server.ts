@@ -601,7 +601,8 @@ async function startServer() {
     const { workspaceId } = req.params;
     const data = req.body;
     try {
-      const [inserted] = await db.insert(allocationRules).values({ ...data, workspaceId }).returning();
+      const id = crypto.randomUUID();
+      const [inserted] = await db.insert(allocationRules).values({ id, ...data, workspaceId }).returning();
       await invalidateCache(buildCacheKey("ws", workspaceId, "allocation-rules"));
       res.json(inserted);
     } catch (err) {
@@ -1090,7 +1091,8 @@ async function startServer() {
     const { workspaceId } = req.params;
     const data = req.body;
     try {
-      const [inserted] = await db.insert(catalogItems).values({ ...data, workspaceId }).returning();
+      const id = crypto.randomUUID();
+      const [inserted] = await db.insert(catalogItems).values({ id, ...data, workspaceId }).returning();
       await invalidateCache(buildCacheKey("ws", workspaceId, "catalog-items"));
       res.json(inserted);
     } catch (err) {
@@ -1248,7 +1250,8 @@ async function startServer() {
     const { workspaceId } = req.params;
     const data = req.body;
     try {
-      const [inserted] = await db.insert(staff).values({ ...data, workspaceId }).returning();
+      const id = crypto.randomUUID();
+      const [inserted] = await db.insert(staff).values({ id, ...data, workspaceId }).returning();
       await invalidateCache(buildCacheKey("ws", workspaceId, "staff"));
       res.json(inserted);
     } catch (err) {
@@ -1305,6 +1308,7 @@ async function startServer() {
     const data = req.body;
     try {
       const newReceipt = {
+        id: crypto.randomUUID(),
         ...data,
         workspaceId,
         items: JSON.stringify(data.items)
