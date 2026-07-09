@@ -543,7 +543,12 @@ async function startServer() {
     const { workspaceId } = req.params;
     const data = req.body;
     try {
-      const [inserted] = await db.insert(accounts).values({ ...data, workspaceId }).returning();
+      const newAccount = {
+        id: crypto.randomUUID(),
+        ...data,
+        workspaceId
+      };
+      const [inserted] = await db.insert(accounts).values(newAccount).returning();
       await invalidateCache(buildCacheKey("ws", workspaceId, "accounts"));
       res.json(inserted);
     } catch (err) {
@@ -853,6 +858,7 @@ async function startServer() {
     const data = req.body;
     try {
       const newInvoice = {
+        id: crypto.randomUUID(),
         ...data,
         workspaceId,
         items: JSON.stringify(data.items)

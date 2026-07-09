@@ -70,6 +70,12 @@ interface PendingAccountUpdate {
   updates: Partial<Account>;
 }
 
+interface PendingAccountCreation {
+  name: string;
+  initialBalance: number;
+  currency?: string;
+}
+
 interface PendingPreferenceUpdate {
   updates: Partial<UserProfile['preferences']>;
 }
@@ -84,6 +90,7 @@ interface Message {
   pendingReport?: PendingReport;
   pendingWorkspaceUpdate?: PendingWorkspaceUpdate;
   pendingAccountUpdate?: PendingAccountUpdate;
+  pendingAccountCreation?: PendingAccountCreation;
   pendingPreferenceUpdate?: PendingPreferenceUpdate;
 }
 
@@ -249,6 +256,19 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
                     paidAmount: { type: Type.NUMBER, description: "The amount already paid" }
                   },
                   required: ["clientName", "amount", "dueDate", "introduction"]
+                }
+              },
+              {
+                name: "proposeAccount",
+                description: "Propose creating a new financial or bank account. ALWAYS ask the user for the initial balance if it is not provided.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: {
+                    name: { type: Type.STRING, description: "The name of the account (e.g. Cash, GT Bank)" },
+                    initialBalance: { type: Type.NUMBER, description: "The starting balance of the account" },
+                    currency: { type: Type.STRING, description: "The currency of the account (e.g. USD, GHS)" }
+                  },
+                  required: ["name", "initialBalance"]
                 }
               },
               {
@@ -429,6 +449,17 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
               description: args.description
             }
           }]);
+        } else if (call.name === 'proposeAccount') {
+          const args = call.args as any;
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `I've prepared a new account record. Please review the details:`,
+            pendingAccountCreation: {
+              name: args.name,
+              initialBalance: args.initialBalance,
+              currency: args.currency
+            }
+          }]);
         } else if (call.name === 'proposeUpdate') {
           const args = call.args as any;
           setMessages(prev => [...prev, {
@@ -607,6 +638,36 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
     } catch (error) {
       console.error('Error saving invoice:', error);
       toast.error("Failed to record invoice.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const confirmAccount = async (account: PendingAccountCreation, index: number) => {
+    if (!workspace) return;
+    setIsLoading(true);
+    try {
+      const accountData = {
+        name: account.name,
+        balance: Number(account.initialBalance) || 0,
+        currency: account.currency || workspace.currency,
+        isDefault: false
+      };
+
+      await api.createAccount(workspace.id, accountData);
+      
+      toast.success("Account created successfully!");
+      window.dispatchEvent(new CustomEvent('refresh-data'));
+
+      setMessages(prev => prev.map((msg, i) => {
+        if (i === index) {
+          return { ...msg, content: "Account created! ✅", pendingAccountCreation: undefined };
+        }
+        return msg;
+      }));
+    } catch (error) {
+      console.error('Error creating account:', error);
+      toast.error('Failed to create account');
     } finally {
       setIsLoading(false);
     }
@@ -1050,6 +1111,40 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
                       >
                         {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
                         Confirm Update
+                      </button>
+                    </motion.div>
+                  )}
+                  {m.pendingAccountCreation && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-card border border-emerald-600/30 rounded-xl overflow-hidden shadow-xl"
+                    >
+                      <div className="p-4 space-y-3 bg-emerald-50/90">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded bg-emerald-600 text-white shadow-sm">
+                            NEW ACCOUNT
+                          </span>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-xs">
+                            <span className="font-bold text-slate-600 uppercase">Account Name:</span>
+                            <span className="text-slate-900">{m.pendingAccountCreation.name}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="font-bold text-slate-600 uppercase">Initial Balance:</span>
+                            <span className="text-slate-900">{m.pendingAccountCreation.currency || workspace?.currency} {m.pendingAccountCreation.initialBalance}</span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <button 
+                        onClick={() => confirmAccount(m.pendingAccountCreation!, i)}
+                        disabled={isLoading}
+                        className="w-full p-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
+                      >
+                        {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                        Confirm Account
                       </button>
                     </motion.div>
                   )}
