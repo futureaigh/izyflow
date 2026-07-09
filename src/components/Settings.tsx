@@ -1702,7 +1702,7 @@ export function Settings({ workspace, user }: SettingsProps) {
                                   }}
                                   className="text-muted-foreground hover:text-blue-600 h-8 w-8 p-0 rounded-lg"
                                 >
-                                  <Save className="h-4 w-4" />
+                                  <Pencil className="h-4 w-4" />
                                 </Button>
                                 <Button 
                                   variant="ghost" 

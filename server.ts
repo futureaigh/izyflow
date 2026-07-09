@@ -337,7 +337,11 @@ async function startServer() {
         contents,
         config,
       });
-      res.json(response);
+      res.json({
+        text: response.text,
+        functionCalls: response.functionCalls,
+        raw: response
+      });
     } catch (error: any) {
       console.error("Gemini API error:", error);
       res.status(500).json({ error: error.message || "Failed to generate AI response" });
