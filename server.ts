@@ -861,6 +861,7 @@ async function startServer() {
       const newInvoice = {
         id: crypto.randomUUID(),
         ...data,
+        clientBusinessName: data.clientBusinessName || data.clientName || "Unknown Business",
         workspaceId,
         items: JSON.stringify(data.items)
       };

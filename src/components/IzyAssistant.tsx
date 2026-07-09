@@ -304,15 +304,15 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
               },
               {
                 name: "proposeAccount",
-                description: "Propose creating a new financial or bank account. ALWAYS ask the user for the initial balance if it is not provided.",
+                description: "Propose creating a new financial or bank account.",
                 parameters: {
                   type: Type.OBJECT,
                   properties: {
                     name: { type: Type.STRING, description: "The name of the account (e.g. Cash, GT Bank)" },
-                    initialBalance: { type: Type.NUMBER, description: "The starting balance of the account" },
+                    initialBalance: { type: Type.NUMBER, description: "The starting balance of the account (optional, defaults to 0)" },
                     currency: { type: Type.STRING, description: "The currency of the account (e.g. USD, GHS)" }
                   },
-                  required: ["name", "initialBalance"]
+                  required: ["name"]
                 }
               },
               {
@@ -692,10 +692,17 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
       }
     } catch (error: any) {
       console.error('AI Error:', error);
+      
+      let errorMsg = '(Network or processing error)';
+      if (error.message?.includes('API_KEY')) {
+        errorMsg = '(Configuration issue)';
+      } else if (error.message && !error.message.includes('Failed to fetch') && !error.message.includes('HTTP error')) {
+        errorMsg = `(${error.message})`;
+      }
 
       setMessages(prev => [...prev, { 
         role: 'assistant', 
-        content: `Sorry, I'm having trouble connecting right now. ${error.message?.includes('API_KEY') ? '(Configuration issue)' : '(Network or processing error)'}` 
+        content: `Sorry, I'm having trouble connecting right now. ${errorMsg}` 
       }]);
     } finally {
       setIsLoading(false);
@@ -787,6 +794,7 @@ Available Expense Categories: ${workspace?.expenseCategories?.join(', ') || 'Ren
       const invoiceData = {
         workspaceId: workspace.id,
         clientName: invoice.clientName,
+        clientBusinessName: invoice.clientName,
         amount: Number(invoice.amount) || 0,
         currency: invoice.currency || workspace.currency,
         dueDate,
