@@ -36,6 +36,7 @@ export const workspaces = sqliteTable("workspaces", {
   mobileMoneyNumber: text("mobile_money_number"),
   onlinePaymentUrl: text("online_payment_url"),
   brandColor: text("brand_color"),
+  collaborators: text("collaborators"), // JSON array of email strings
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });

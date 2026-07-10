@@ -590,6 +590,7 @@ async function startServer() {
             incomeCategories: safeParse(w.incomeCategories),
             expenseCategories: safeParse(w.expenseCategories),
             investmentCategories: safeParse(w.investmentCategories),
+            collaborators: safeParse((w as any).collaborators),
           }));
         }
       );
@@ -613,6 +614,7 @@ async function startServer() {
         incomeCategories: data.incomeCategories ? JSON.stringify(data.incomeCategories) : null,
         expenseCategories: data.expenseCategories ? JSON.stringify(data.expenseCategories) : null,
         investmentCategories: data.investmentCategories ? JSON.stringify(data.investmentCategories) : null,
+        collaborators: data.collaborators ? JSON.stringify(data.collaborators) : null,
       };
       const [inserted] = await db.insert(workspaces).values(newWorkspace).returning();
       await invalidateCache(buildCacheKey("user", userId, "workspaces"));
@@ -621,6 +623,7 @@ async function startServer() {
         incomeCategories: safeParse(inserted.incomeCategories),
         expenseCategories: safeParse(inserted.expenseCategories),
         investmentCategories: safeParse(inserted.investmentCategories),
+        collaborators: safeParse((inserted as any).collaborators),
       });
     } catch (err) {
       console.error("Error in POST /api/workspaces:", err);
@@ -640,6 +643,9 @@ async function startServer() {
         investmentCategories: data.investmentCategories ? JSON.stringify(data.investmentCategories) : undefined,
         paymentMethods: data.paymentMethods ? JSON.stringify(data.paymentMethods) : undefined,
       };
+      if (data.collaborators !== undefined) {
+        (updateData as any).collaborators = JSON.stringify(data.collaborators);
+      }
       const [updated] = await db.update(workspaces).set(updateData).where(eq(workspaces.id, id)).returning();
       await invalidateCache(buildCacheKey("user", userId, "workspaces"));
       res.json({
@@ -648,6 +654,7 @@ async function startServer() {
         expenseCategories: safeParse(updated.expenseCategories),
         investmentCategories: safeParse(updated.investmentCategories),
         paymentMethods: safeParse((updated as any).paymentMethods),
+        collaborators: safeParse((updated as any).collaborators),
       });
     } catch (err) {
       console.error("Error in PUT /api/workspaces:", err);
