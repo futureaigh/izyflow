@@ -10,17 +10,14 @@ import { clerkMiddleware, getAuth, clerkClient } from "@clerk/express";
 import { verifyWebhook } from "@clerk/express/webhooks";
 // Drizzle and DB imports
 import { db } from "./src/db/index";
-import { 
-  users, workspaces, accounts, allocationRules, transactions, 
-  invoices, catalogItems, pricingCalculations, contacts, 
+import {
+  users, workspaces, accounts, allocationRules, transactions,
+  invoices, catalogItems, pricingCalculations, contacts,
   staff, staffReceipts, cmsConfigs, analytics, appErrors,
   subscriptionPlans, subscriptions, paymentTransactions
 } from "./src/db/schema";
 import { eq, and, desc, sql, gte } from "drizzle-orm";
 import { withCache, invalidateCache, buildCacheKey, rateLimit } from "./src/lib/redis";
-import jwt from "jsonwebtoken";
-import { Resend } from "resend";
-
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -46,10 +43,6 @@ function safeParse(str: string | null | undefined) {
   }
 }
 
-const INVITE_SECRET = process.env.JWT_INVITE_SECRET;
-const resend = new Resend(process.env.RESEND_API_KEY!);
-const APP_URL = process.env.APP_URL || "http://localhost:3000";
-
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
@@ -57,7 +50,7 @@ async function startServer() {
   app.use(cors());
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
-  
+
   // Register Clerk Auth Middleware (excludes webhook route and health check)
   app.use(clerkMiddleware({
     excludedRoutes: ['/api/webhooks/clerk', '/api/health']
@@ -80,17 +73,17 @@ async function startServer() {
       const evt = await verifyWebhook(req, {
         signingSecret: process.env.CLERK_WEBHOOK_SIGNING_SECRET
       });
-      
+
       console.log(`Received Clerk webhook: ${evt.type}`);
-      
+
       // ==================== USER EVENTS ====================
       if (evt.type === "user.created") {
         const { id, email_addresses, first_name, last_name } = evt.data;
         const email = email_addresses?.[0]?.email_address || "";
-        const displayName = first_name || last_name 
+        const displayName = first_name || last_name
           ? `${first_name || ""} ${last_name || ""}`.trim()
           : email.split("@")[0] || "User";
-        
+
         const [existing] = await db.select().from(users).where(eq(users.uid, id));
         if (!existing) {
           await db.insert(users).values({
@@ -107,18 +100,18 @@ async function startServer() {
           console.log(`ℹ️  User already exists in Turso: ${id}`);
         }
       }
-      
+
       if (evt.type === "user.updated") {
         const { id, email_addresses, first_name, last_name, image_url } = evt.data;
         const email = email_addresses?.[0]?.email_address || "";
-        const displayName = first_name || last_name 
+        const displayName = first_name || last_name
           ? `${first_name || ""} ${last_name || ""}`.trim()
           : email.split("@")[0] || "User";
-        
+
         const [existing] = await db.select().from(users).where(eq(users.uid, id));
         if (existing) {
           await db.update(users)
-            .set({ 
+            .set({
               email,
               displayName,
               photoURL: image_url,
@@ -128,13 +121,13 @@ async function startServer() {
           console.log(`✅ Updated user in Turso: ${id} (${email})`);
         }
       }
-      
+
       if (evt.type === "user.deleted") {
         const { id } = evt.data;
         await db.delete(users).where(eq(users.uid, id));
         console.log(`✅ Deleted user from Turso: ${id}`);
       }
-      
+
       // ==================== SESSION EVENTS ====================
       if (evt.type === "session.created") {
         const { user_id } = evt.data;
@@ -143,7 +136,7 @@ async function startServer() {
           .where(eq(users.uid, user_id));
         console.log(`✅ User logged in: ${user_id}`);
       }
-      
+
       if (evt.type === "session.ended" || evt.type === "session.revoked") {
         const { user_id } = evt.data as any;
         await db.update(users)
@@ -151,8 +144,8 @@ async function startServer() {
           .where(eq(users.uid, user_id));
         console.log(`✅ User logged out: ${user_id}`);
       }
-      
-      
+
+
       // ==================== SUBSCRIPTION EVENTS ====================
       if (evt.type === "subscription.created") {
         const { user_id, status, plan_id } = evt.data as any;
@@ -171,7 +164,7 @@ async function startServer() {
           console.log(`✅ Subscription created for user ${user_id}: ${plan_id}`);
         }
       }
-      
+
       if (evt.type === "subscription.updated") {
         const { user_id, status, plan_id } = evt.data as any;
         const [existing] = await db.select().from(users).where(eq(users.uid, user_id));
@@ -189,7 +182,7 @@ async function startServer() {
           console.log(`✅ Subscription updated for user ${user_id}: ${plan_id}`);
         }
       }
-      
+
       if (evt.type === "subscription.active") {
         const { user_id, plan_id } = evt.data as any;
         const [existing] = await db.select().from(users).where(eq(users.uid, user_id));
@@ -207,7 +200,7 @@ async function startServer() {
           console.log(`✅ Subscription activated for user ${user_id}: ${plan_id}`);
         }
       }
-      
+
       if (evt.type === "subscription.pastDue") {
         const { user_id } = evt.data as any;
         const [existing] = await db.select().from(users).where(eq(users.uid, user_id));
@@ -224,21 +217,21 @@ async function startServer() {
           console.log(`⚠️  Subscription past due for user ${user_id}`);
         }
       }
-      
+
       // ==================== EMAIL EVENTS ====================
       if (evt.type === "email.created") {
         const { user_id, email_address, verification } = evt.data as any;
         console.log(`✅ Email created for user ${user_id}: ${email_address} (verified: ${verification?.status})`);
         // Future: Track email verification status for analytics
       }
-      
+
       // ==================== SMS EVENTS ====================
       if (evt.type === "sms.created") {
         const { user_id, phone_number, verification } = evt.data as any;
         console.log(`✅ SMS created for user ${user_id}: ${phone_number} (verified: ${verification?.status})`);
         // Future: Track phone verification status for analytics
       }
-      
+
       res.send('Webhook received');
     } catch (error) {
       console.error('❌ Webhook error:', error);
@@ -526,7 +519,7 @@ async function startServer() {
             try {
               const clerkUser = await clerkClient.users.getUser(userId);
               email = clerkUser.emailAddresses?.[0]?.emailAddress ?? "";
-            } catch {}
+            } catch { }
             const displayName = email ? email.split("@")[0] : "User";
             const newUser = {
               uid: userId,
@@ -654,6 +647,19 @@ async function startServer() {
     const userId = req.auth.userId;
     const data = req.body;
     try {
+      const [ws] = await db.select().from(workspaces).where(eq(workspaces.id, id));
+      if (!ws) return res.status(404).json({ error: "Workspace not found" });
+
+      if (data.collaborators !== undefined) {
+        if (ws.ownerId !== userId) return res.status(403).json({ error: "Only owner can manage collaborators" });
+        const [owner] = await db.select().from(users).where(eq(users.uid, userId));
+        const sub = safeParse(owner?.subscription) || { plan: "Free" };
+        if (sub.plan !== "Agency") return res.status(403).json({ error: "Agency plan required" });
+        const collabs: string[] = data.collaborators;
+        if (collabs.length > 5) return res.status(403).json({ error: "Max 5 collaborators" });
+        if (collabs.some(e => !e.includes("@"))) return res.status(400).json({ error: "Invalid email in collaborators" });
+      }
+
       const updateData = {
         ...data,
         incomeCategories: data.incomeCategories ? JSON.stringify(data.incomeCategories) : undefined,
@@ -703,82 +709,6 @@ async function startServer() {
     } catch (err) {
       console.error("Error in DELETE /api/workspaces/:id:", err);
       res.status(500).json({ error: "Failed to delete workspace" });
-    }
-  });
-
-  // --- WORKSPACE INVITATION ---
-  app.post("/api/workspaces/:id/invite", requireAuthMiddleware(), async (req: any, res) => {
-    const { id } = req.params;
-    const userId = req.auth.userId;
-    const { email } = req.body;
-    try {
-      if (!email || !email.includes("@")) return res.status(400).json({ error: "Valid email required" });
-
-      const [ws] = await db.select().from(workspaces).where(eq(workspaces.id, id));
-      if (!ws) return res.status(404).json({ error: "Workspace not found" });
-      if (ws.ownerId !== userId) return res.status(403).json({ error: "Only owner can invite" });
-
-      const [owner] = await db.select().from(users).where(eq(users.uid, userId));
-      const ownerSubscription = safeParse(owner?.subscription) || { plan: "Free" };
-      if (ownerSubscription.plan !== "Agency") return res.status(403).json({ error: "Agency plan required for collaborators" });
-
-      const collaborators: string[] = safeParse((ws as any).collaborators) || [];
-      if (collaborators.length >= 5) return res.status(403).json({ error: "Max 5 collaborators" });
-      if (collaborators.includes(email)) return res.status(400).json({ error: "Already a collaborator" });
-      if (email === owner?.email) return res.status(400).json({ error: "Cannot invite yourself" });
-
-      const token = jwt.sign({ workspaceId: id, email }, INVITE_SECRET, { expiresIn: "7d" });
-
-      const { error: sendError } = await resend.emails.send({
-        from: process.env.RESEND_FROM_EMAIL || "noreply@myizyflow.com",
-        to: email,
-        subject: `${owner?.displayName || "Someone"} invited you to ${ws.name} on IzyFlow`,
-        html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px">
-          <h2>You're invited to <strong>${ws.name}</strong></h2>
-          <p><strong>${owner?.displayName || "Someone"}</strong> invited you to collaborate on their IzyFlow workspace.</p>
-          <a href="${APP_URL}/accept-invite?token=${token}" style="display:inline-block;padding:12px 32px;background:#7c3aed;color:#fff;border-radius:12px;text-decoration:none;font-weight:bold;margin:16px 0">Accept Invitation</a>
-          <p style="color:#666;font-size:13px">This link expires in 7 days.</p>
-        </div>`,
-      });
-      if (sendError) {
-        console.error("Resend error:", sendError);
-        return res.status(500).json({ error: "Failed to send invitation" });
-      }
-
-      res.json({ message: "Invitation sent" });
-    } catch (err) {
-      console.error("Error in POST /api/workspaces/:id/invite:", err);
-      res.status(500).json({ error: "Failed to send invitation" });
-    }
-  });
-
-  app.post("/api/workspaces/accept-invite", requireAuthMiddleware(), async (req: any, res) => {
-    const userId = req.auth.userId;
-    const { token } = req.body;
-    try {
-      if (!token) return res.status(400).json({ error: "Token required" });
-
-      const payload = jwt.verify(token, INVITE_SECRET) as any;
-      const { workspaceId, email } = payload;
-
-      const [user] = await db.select().from(users).where(eq(users.uid, userId));
-      if (!user || user.email !== email) return res.status(403).json({ error: "This invitation was sent to a different email" });
-
-      const [ws] = await db.select().from(workspaces).where(eq(workspaces.id, workspaceId));
-      if (!ws) return res.status(404).json({ error: "Workspace not found" });
-
-      const collaborators: string[] = safeParse((ws as any).collaborators) || [];
-      if (collaborators.includes(email)) return res.json({ message: "Already a collaborator" });
-      if (collaborators.length >= 5) return res.status(403).json({ error: "Max collaborators reached" });
-
-      await db.update(workspaces).set({ collaborators: JSON.stringify([...collaborators, email]) }).where(eq(workspaces.id, workspaceId));
-      await invalidateCache(buildCacheKey("user", userId, "workspaces"));
-
-      res.json({ message: "Collaborator added" });
-    } catch (err: any) {
-      if (err.name === "TokenExpiredError" || err.name === "JsonWebTokenError") return res.status(400).json({ error: "Invalid or expired invitation" });
-      console.error("Error in POST /api/workspaces/accept-invite:", err);
-      res.status(500).json({ error: "Failed to accept invitation" });
     }
   });
 
@@ -1135,7 +1065,7 @@ async function startServer() {
       if (inserted.clientName) {
         const [existingContact] = await db.select().from(contacts)
           .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.name, inserted.clientName)));
-        
+
         if (!existingContact) {
           const contactId = crypto.randomUUID();
           await db.insert(contacts).values({
@@ -1151,7 +1081,7 @@ async function startServer() {
           });
         } else {
           await db.update(contacts)
-            .set({ 
+            .set({
               lastUsed: new Date().toISOString(),
               updatedAt: new Date().toISOString()
             })
@@ -1258,7 +1188,7 @@ async function startServer() {
       if (existing.clientName) {
         const [existingContact] = await db.select().from(contacts)
           .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.name, existing.clientName)));
-        
+
         if (!existingContact) {
           const contactId = crypto.randomUUID();
           await db.insert(contacts).values({
@@ -1274,7 +1204,7 @@ async function startServer() {
           });
         } else {
           await db.update(contacts)
-            .set({ 
+            .set({
               lastUsed: new Date().toISOString(),
               updatedAt: new Date().toISOString()
             })

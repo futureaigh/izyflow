@@ -36,8 +36,6 @@ export const api = {
   createWorkspace: (data: any) => fetchAPI("/api/workspaces", { method: "POST", body: JSON.stringify(data) }),
   updateWorkspace: (id: string, data: any) => fetchAPI(`/api/workspaces/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteWorkspace: (id: string) => fetchAPI(`/api/workspaces/${id}`, { method: "DELETE" }),
-  inviteCollaborator: (id: string, email: string) => fetchAPI(`/api/workspaces/${id}/invite`, { method: "POST", body: JSON.stringify({ email }) }),
-  acceptInvite: (token: string) => fetchAPI("/api/workspaces/accept-invite", { method: "POST", body: JSON.stringify({ token }) }),
 
   // Accounts
   getAccounts: (wsId: string) => fetchAPI(`/api/workspaces/${wsId}/accounts`),
@@ -63,6 +61,7 @@ export const api = {
   updateInvoice: (wsId: string, id: string, data: any) => fetchAPI(`/api/workspaces/${wsId}/invoices/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteInvoice: (wsId: string, id: string) => fetchAPI(`/api/workspaces/${wsId}/invoices/${id}`, { method: "DELETE" }),
   recordPayment: (wsId: string, id: string, data: any) => fetchAPI(`/api/workspaces/${wsId}/invoices/${id}/payments`, { method: "POST", body: JSON.stringify(data) }),
+  remindInvoice: (wsId: string, id: string) => fetchAPI(`/api/workspaces/${wsId}/invoices/${id}/remind`, { method: "POST" }),
 
   // Catalog Items
   getCatalogItems: (wsId: string) => fetchAPI(`/api/workspaces/${wsId}/catalog-items`),

@@ -1928,17 +1928,18 @@ export function Settings({ workspace, user }: SettingsProps) {
                         }
                         if (!workspace) return;
                         try {
-                          await api.inviteCollaborator(workspace.id, email);
+                          const current = workspace.collaborators || [];
+                          await api.updateWorkspace(workspace.id, { collaborators: [...current, email] });
                           window.dispatchEvent(new CustomEvent('refresh-workspaces'));
                           input.value = '';
-                          toast.success('Invitation sent');
+                          toast.success('Collaborator added');
                         } catch (err: any) {
-                          toast.error(err?.message || 'Failed to send invitation');
+                          toast.error(err?.message || 'Failed to add collaborator');
                         }
                       }}
                     >
                       <UserPlus className="h-4 w-4 mr-2" />
-                      Invite
+                      Add
                     </Button>
                   </div>
                 </div>
