@@ -300,24 +300,40 @@ export function Dashboard({
     };
   };
 
-  // 1. REVENUE (Income)
-  const revenue = filteredTransactions
-    .filter(t => t.type === 'Income')
+  // 1. REAL INCOME (pure income, excludes loans)
+  const realIncome = filteredTransactions
+    .filter(t => t.type === 'Income' && !t.isLoan)
     .reduce((acc, t) => acc + convert(t.amount || 0, t.currency), 0);
 
-  // 2. OUTGOINGS (Expenses + Investments)
+  // 2. LOANS RECEIVED (borrowed money)
+  const loansReceived = filteredTransactions
+    .filter(t => t.type === 'Income' && t.isLoan && t.loanStatus === 'Loan')
+    .reduce((acc, t) => acc + convert(t.amount || 0, t.currency), 0);
+
+  // 3. REPAYMENTS RECEIVED (someone paying you back)
+  const repaymentsReceived = filteredTransactions
+    .filter(t => t.type === 'Income' && t.isLoan && t.loanStatus === 'Repayment')
+    .reduce((acc, t) => acc + convert(t.amount || 0, t.currency), 0);
+
+  // 4. OUTGOINGS (Expenses + Investments, excludes loan repayments)
   const outgoings = filteredTransactions
-    .filter(t => t.type === 'Expense' || t.type === 'Investment')
+    .filter(t => (t.type === 'Expense' || t.type === 'Investment') && !(t.isLoan && t.loanStatus === 'Repayment'))
     .reduce((acc, t) => acc + convert(t.amount || 0, t.currency), 0);
 
-  // 3. INVESTED (Investment only)
+  // 5. DEBT PAID (paying off loans)
+  const repaymentsMade = filteredTransactions
+    .filter(t => t.type === 'Expense' && t.isLoan && t.loanStatus === 'Repayment')
+    .reduce((acc, t) => acc + convert(t.amount || 0, t.currency), 0);
+
+  // 6. INVESTED (Investment only)
   const totalInvested = filteredTransactions
     .filter(t => t.type === 'Investment')
     .reduce((acc, t) => acc + convert(t.amount || 0, t.currency), 0);
 
-  // 4. NET CASH FLOW
-  const netCashFlow = revenue - outgoings;
-  const savingsRate = revenue > 0 ? (netCashFlow / revenue) * 100 : 0;
+  // 7. NET CASH FLOW — all pills sum to this
+  const netCashFlow = realIncome + loansReceived + repaymentsReceived - outgoings - repaymentsMade - totalInvested;
+  const totalCashIn = realIncome + loansReceived + repaymentsReceived;
+  const savingsRate = totalCashIn > 0 ? (netCashFlow / totalCashIn) * 100 : 0;
   const isOverspent = netCashFlow < 0;
 
   // 5. DEBT & LOANS (Cumulative - Total Outstanding)
@@ -430,7 +446,7 @@ export function Dashboard({
       message: `Great job! You have ${displayCurrency} ${convert(netCashFlow).toLocaleString()} left over after all expenses.`,
       type: 'positive'
     },
-    revenue > 0 ? {
+    totalCashIn > 0 ? {
       title: workspace.type === 'Business' ? "Business Activity" : "Financial Profile",
       message: `${workspace.type === 'Business' ? 'Your business' : 'You'} achieved a net flow of ${displayCurrency} ${convert(netCashFlow).toLocaleString()} this period.`,
       type: netCashFlow > 0 ? 'positive' : 'negative'
@@ -865,28 +881,68 @@ export function Dashboard({
       </div>
 
       {/* Financial Core Metrics */}
-      <div className={cn("grid gap-4 md:grid-cols-2 mb-8", workspace?.enableInvestments !== false ? "lg:grid-cols-4" : "lg:grid-cols-3")}>
+      <div className={cn("grid gap-4 md:grid-cols-2 mb-8", workspace?.enableLoansDebts !== false && workspace?.enableInvestments !== false ? "lg:grid-cols-5" : workspace?.enableLoansDebts !== false || workspace?.enableInvestments !== false ? "lg:grid-cols-4" : "lg:grid-cols-3")}>
         <Card 
           className="border-border bg-card shadow-sm hover:shadow-md transition-all cursor-pointer group"
-          onClick={() => openBreakdown('Income Breakdown', 'transactions', filteredTransactions.filter(t => t.type === 'Income'))}
+          onClick={() => openBreakdown('Income Breakdown', 'transactions', filteredTransactions.filter(t => t.type === 'Income' && !t.isLoan))}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Total Income</CardTitle>
+            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Real Income</CardTitle>
             <div className="h-8 w-8 rounded-xl bg-emerald-50 flex items-center justify-center group-hover:scale-110 transition-transform">
               <ArrowUpRight className="h-4 w-4 text-emerald-500" />
             </div>
           </CardHeader>
           <CardContent>
             <div className="text-xl font-black text-foreground">
-              {displayCurrency} {revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {displayCurrency} {realIncome.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <p className="text-[10px] text-muted-foreground font-bold mt-1">Earnings this period</p>
           </CardContent>
         </Card>
 
+        {workspace?.enableLoansDebts !== false && (
+        <Card 
+          className="border-border bg-card shadow-sm hover:shadow-md transition-all cursor-pointer group"
+          onClick={() => openBreakdown('Loans Received', 'transactions', filteredTransactions.filter(t => t.type === 'Income' && t.isLoan && t.loanStatus === 'Loan'))}
+        >
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Loans Received</CardTitle>
+            <div className="h-8 w-8 rounded-xl bg-blue-50 flex items-center justify-center group-hover:scale-110 transition-transform">
+              <ArrowUpRight className="h-4 w-4 text-blue-500" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-xl font-black text-blue-600">
+              {displayCurrency} {loansReceived.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <p className="text-[10px] text-muted-foreground font-bold mt-1">Money borrowed</p>
+          </CardContent>
+        </Card>
+        )}
+
+        {workspace?.enableLoansDebts !== false && (
+        <Card 
+          className="border-border bg-card shadow-sm hover:shadow-md transition-all cursor-pointer group"
+          onClick={() => openBreakdown('Loans Recovered', 'transactions', filteredTransactions.filter(t => t.type === 'Income' && t.isLoan && t.loanStatus === 'Repayment'))}
+        >
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Loans Recovered</CardTitle>
+            <div className="h-8 w-8 rounded-xl bg-teal-50 flex items-center justify-center group-hover:scale-110 transition-transform">
+              <ArrowUpRight className="h-4 w-4 text-teal-500" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-xl font-black text-teal-600">
+              {displayCurrency} {repaymentsReceived.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <p className="text-[10px] text-muted-foreground font-bold mt-1">Repayments received</p>
+          </CardContent>
+        </Card>
+        )}
+
         <Card 
           className="border-border bg-card shadow-sm hover:shadow-md transition-all group cursor-pointer"
-          onClick={() => openBreakdown('Outgoings Breakdown', 'transactions', filteredTransactions.filter(t => t.type === 'Expense' || t.type === 'Investment'))}
+          onClick={() => openBreakdown('Outgoings Breakdown', 'transactions', filteredTransactions.filter(t => (t.type === 'Expense' || t.type === 'Investment') && !(t.isLoan && t.loanStatus === 'Repayment')))}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Total Outgoings</CardTitle>
@@ -901,6 +957,26 @@ export function Dashboard({
             <p className="text-[10px] text-muted-foreground font-bold mt-1">Spent & Invested</p>
           </CardContent>
         </Card>
+
+        {workspace?.enableLoansDebts !== false && (
+        <Card 
+          className="border-border bg-card shadow-sm hover:shadow-md transition-all group cursor-pointer"
+          onClick={() => openBreakdown('Debt Paid', 'transactions', filteredTransactions.filter(t => t.type === 'Expense' && t.isLoan && t.loanStatus === 'Repayment'))}
+        >
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Debt Paid</CardTitle>
+            <div className="h-8 w-8 rounded-xl bg-orange-50 flex items-center justify-center group-hover:scale-110 transition-transform">
+              <ArrowDownRight className="h-4 w-4 text-orange-500" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-xl font-black text-orange-600">
+              {displayCurrency} {repaymentsMade.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <p className="text-[10px] text-muted-foreground font-bold mt-1">Loan repayments made</p>
+          </CardContent>
+        </Card>
+        )}
 
         <Card 
           className="border-border bg-card shadow-sm hover:shadow-md transition-all group cursor-pointer"
@@ -1388,7 +1464,7 @@ export function Dashboard({
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <p className="text-2xl font-bold text-foreground">{displayCurrency} {revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                  <p className="text-2xl font-bold text-foreground">{displayCurrency} {realIncome.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                   <p className="text-sm text-muted-foreground">Current Sales</p>
                 </div>
                 <div className="text-right space-y-1">
@@ -1396,9 +1472,9 @@ export function Dashboard({
                   <p className="text-sm text-muted-foreground">Target</p>
                 </div>
               </div>
-              <Progress value={salesTarget > 0 ? (revenue / convert(salesTarget)) * 100 : 0} className="h-3 bg-purple-100" />
+              <Progress value={salesTarget > 0 ? (realIncome / convert(salesTarget)) * 100 : 0} className="h-3 bg-purple-100" />
               <p className="text-xs text-muted-foreground text-center">
-                {salesTarget > 0 ? Math.round((revenue / convert(salesTarget)) * 100) : 0}% of your target reached
+                {salesTarget > 0 ? Math.round((realIncome / convert(salesTarget)) * 100) : 0}% of your target reached
               </p>
             </CardContent>
           </Card>
