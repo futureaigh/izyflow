@@ -639,6 +639,28 @@ export function Dashboard({
 
   const salesTarget = workspace?.salesTarget || 0;
 
+  useEffect(() => {
+    if (!workspace?.enableAutomatedReminders) return;
+    const now = new Date();
+    const overdue = invoices.filter(inv => {
+      if (inv.status !== 'Overdue' && inv.status !== 'Sent') return false;
+      if (!inv.dueDate) return false;
+      const due = new Date(inv.dueDate);
+      if (due >= now) return false;
+      if (inv.lastAutomatedReminderSentAt) {
+        const lastSent = new Date(inv.lastAutomatedReminderSentAt);
+        const daysSince = (now.getTime() - lastSent.getTime()) / 86400000;
+        if (daysSince < 7) return false;
+      }
+      return true;
+    });
+    overdue.forEach(inv => {
+      api.updateInvoice(workspace.id, inv.id, { lastAutomatedReminderSentAt: now.toISOString() }).then(() => {
+        toast.warning(`Overdue: ${inv.clientName} — ${displayCurrency} ${inv.amount?.toLocaleString()} overdue since ${new Date(inv.dueDate).toLocaleDateString()}`);
+      });
+    });
+  }, [workspace?.enableAutomatedReminders, invoices]);
+
   return (
     <div className="space-y-8 pb-12">
       {/* Header */}
@@ -843,7 +865,7 @@ export function Dashboard({
       </div>
 
       {/* Financial Core Metrics */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
+      <div className={cn("grid gap-4 md:grid-cols-2 mb-8", workspace?.enableInvestments !== false ? "lg:grid-cols-4" : "lg:grid-cols-3")}>
         <Card 
           className="border-border bg-card shadow-sm hover:shadow-md transition-all cursor-pointer group"
           onClick={() => openBreakdown('Income Breakdown', 'transactions', filteredTransactions.filter(t => t.type === 'Income'))}
@@ -908,6 +930,7 @@ export function Dashboard({
           </CardContent>
         </Card>
 
+        {workspace?.enableInvestments !== false && (
         <Card 
           className="border-border bg-card shadow-sm hover:shadow-md transition-all group cursor-pointer"
           onClick={() => openBreakdown('Investment Breakdown', 'transactions', filteredTransactions.filter(t => t.type === 'Investment'))}
@@ -925,9 +948,10 @@ export function Dashboard({
             <p className="text-[10px] text-muted-foreground font-bold mt-1">Growing your wealth</p>
           </CardContent>
         </Card>
+        )}
       </div>
 
-      {/* DEBT & LOANS SECTION */}
+      {workspace?.enableLoansDebts !== false && (
       <div className="grid gap-4 md:grid-cols-1 mb-8">
         <Card 
           className="border-border bg-card shadow-sm hover:shadow-rose-500/5 transition-all group cursor-pointer"
@@ -948,6 +972,7 @@ export function Dashboard({
           </CardContent>
         </Card>
       </div>
+      )}
 
       {/* Flow Breakdown */}
 

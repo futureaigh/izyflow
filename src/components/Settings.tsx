@@ -9,7 +9,7 @@ import { Label } from './ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from './ui/dialog';
-import { Plus, Trash2, Save, Percent, Wallet, Info, Settings as SettingsIcon, CreditCard, Zap, Image as ImageIcon, Tag, User as UserIcon, ChevronDown, ChevronUp, Sparkles, Check, X, Pencil } from 'lucide-react';
+import { Plus, Trash2, Save, Percent, Wallet, Info, Settings as SettingsIcon, CreditCard, Zap, Image as ImageIcon, Tag, User as UserIcon, ChevronDown, ChevronUp, Sparkles, Check, X, Pencil, Users, Shield, Mail, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { UserProfile } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
@@ -53,6 +53,9 @@ export function Settings({ workspace, user }: SettingsProps) {
   const [deleteWorkspaceConfirm, setDeleteWorkspaceConfirm] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [brandColor, setBrandColor] = useState(workspace?.brandColor || '#2563eb');
+  const [enableInvestments, setEnableInvestments] = useState(workspace?.enableInvestments !== false);
+  const [enableLoansDebts, setEnableLoansDebts] = useState(workspace?.enableLoansDebts !== false);
+  const [enableAutomatedReminders, setEnableAutomatedReminders] = useState(workspace?.enableAutomatedReminders || false);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>(workspace?.paymentMethods || []);
   const [newPaymentType, setNewPaymentType] = useState<'Bank' | 'Mobile Money' | 'Online'>('Bank');
   const [newPaymentProvider, setNewPaymentProvider] = useState('');
@@ -72,7 +75,7 @@ export function Settings({ workspace, user }: SettingsProps) {
   const [editingExpenseCategory, setEditingExpenseCategory] = useState<string | null>(null);
   const [editingInvestmentCategory, setEditingInvestmentCategory] = useState<string | null>(null);
   const [editCategoryValue, setEditCategoryValue] = useState('');
-  const [activeTab, setActiveTab] = useState<'workspace' | 'categories' | 'accounts' | 'contacts' | 'preferences'>('workspace');
+  const [activeTab, setActiveTab] = useState<'workspace' | 'categories' | 'accounts' | 'contacts' | 'collaborators' | 'preferences'>('workspace');
   const [isBusinessInfoExpanded, setIsBusinessInfoExpanded] = useState(false);
   const [isPaymentInfoExpanded, setIsPaymentInfoExpanded] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -103,6 +106,9 @@ export function Settings({ workspace, user }: SettingsProps) {
       setOnlinePaymentUrl(workspace.onlinePaymentUrl || '');
       setBrandColor(workspace.brandColor || '#2563eb');
       setPaymentMethods(workspace.paymentMethods || []);
+      setEnableInvestments(workspace.enableInvestments !== false);
+      setEnableLoansDebts(workspace.enableLoansDebts !== false);
+      setEnableAutomatedReminders(workspace.enableAutomatedReminders || false);
     }
   }, [workspace]);
 
@@ -298,6 +304,9 @@ export function Settings({ workspace, user }: SettingsProps) {
       onlinePaymentUrl,
       brandColor,
       paymentMethods,
+      enableInvestments,
+      enableLoansDebts,
+      enableAutomatedReminders,
       updatedAt: new Date().toISOString()
     };
     console.log('Updating workspace with data:', updateData);
@@ -617,6 +626,7 @@ export function Settings({ workspace, user }: SettingsProps) {
             { id: 'categories', label: 'Categories', icon: Tag },
             { id: 'accounts', label: 'Accounts', icon: Wallet },
             { id: 'contacts', label: 'Contacts', icon: UserIcon },
+            { id: 'collaborators', label: 'Team Seats', icon: Users },
             { id: 'preferences', label: 'Preferences', icon: SettingsIcon },
           ].map((tab) => (
             <Button
@@ -1141,6 +1151,61 @@ export function Settings({ workspace, user }: SettingsProps) {
                   <Save className="h-4 w-4 mr-2" />
                   Save Workspace Details
                 </Button>
+
+                <div className="pt-8 mt-8 border-t border-border">
+                  <h3 className="text-sm font-bold text-foreground mb-4">Workspace Modules</h3>
+                  <div className="space-y-3">
+                    <label className="flex items-center justify-between p-4 bg-background/50 rounded-2xl border border-border cursor-pointer">
+                      <div>
+                        <p className="font-bold text-sm text-foreground">Investments</p>
+                        <p className="text-[10px] text-muted-foreground">Track stocks, crypto, and other investments</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={enableInvestments}
+                        onChange={(e) => {
+                          if (!workspace) return;
+                          setEnableInvestments(e.target.checked);
+                        }}
+                        className="h-5 w-5 rounded accent-brand"
+                      />
+                    </label>
+                    <label className="flex items-center justify-between p-4 bg-background/50 rounded-2xl border border-border cursor-pointer">
+                      <div>
+                        <p className="font-bold text-sm text-foreground">Loans & Debts</p>
+                        <p className="text-[10px] text-muted-foreground">Track loans, debts, and repayment schedules</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={enableLoansDebts}
+                        onChange={(e) => {
+                          if (!workspace) return;
+                          setEnableLoansDebts(e.target.checked);
+                        }}
+                        className="h-5 w-5 rounded accent-brand"
+                      />
+                    </label>
+                    <label className="flex items-center justify-between p-4 bg-background/50 rounded-2xl border border-border cursor-pointer">
+                      <div>
+                        <p className="font-bold text-sm text-foreground">Automated Overdue Reminders</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {user?.subscription?.plan === 'Free' ? 'Upgrade to Pro or Agency to enable' : 'Automatically notify clients of overdue invoices'}
+                        </p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={enableAutomatedReminders}
+                        disabled={user?.subscription?.plan === 'Free'}
+                        onChange={(e) => {
+                          if (!workspace) return;
+                          setEnableAutomatedReminders(e.target.checked);
+                          updateWorkspaceDetails();
+                        }}
+                        className="h-5 w-5 rounded accent-brand"
+                      />
+                    </label>
+                  </div>
+                </div>
 
                 <div className="pt-8 mt-8 border-t border-border">
                   <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4">
@@ -1728,6 +1793,161 @@ export function Settings({ workspace, user }: SettingsProps) {
                   </TableBody>
                 </Table>
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTab === 'collaborators' && (
+          <Card className="border-border bg-card/50 shadow-xl backdrop-blur-xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-foreground">
+                <Users className="h-5 w-5 text-muted-foreground" />
+                Team Seats
+              </CardTitle>
+              <CardDescription className="text-muted-foreground">
+                Invite team members to collaborate on this workspace
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center justify-between p-4 bg-brand/5 rounded-2xl border border-brand/10">
+                <div className="flex items-center gap-3">
+                  <Shield className="h-5 w-5 text-brand" />
+                  <div>
+                    <p className="font-bold text-sm">
+                      {workspace?.collaborators?.length || 0} / 5 Seats Used
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {user?.subscription?.plan === 'Agency'
+                        ? 'Agency plan includes 5 team seats'
+                        : 'Upgrade to Agency for team collaboration'}
+                    </p>
+                  </div>
+                </div>
+                {user?.subscription?.plan !== 'Agency' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.dispatchEvent(new CustomEvent('change-tab', { detail: 'subscription' }))}
+                    className="rounded-xl h-10 px-4 font-bold border-brand/20 text-brand hover:bg-brand hover:text-white"
+                  >
+                    Upgrade
+                  </Button>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Current Members</Label>
+                <div className="rounded-2xl border border-border bg-background/50">
+                  <Table>
+                    <TableHeader className="bg-muted/30">
+                      <TableRow className="border-border">
+                        <TableHead className="font-black text-[10px] uppercase tracking-wider py-3">Email</TableHead>
+                        <TableHead className="font-black text-[10px] uppercase tracking-wider py-3">Role</TableHead>
+                        <TableHead className="font-black text-[10px] uppercase tracking-wider pr-6 py-3 text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <TableRow className="border-border">
+                        <TableCell className="py-3">
+                          <div className="flex items-center gap-2">
+                            <Mail className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-bold text-sm">{user?.email || 'Owner'}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-3">
+                          <Badge className="rounded-full bg-brand/10 text-brand border border-brand/20 font-bold text-[10px]">Owner</Badge>
+                        </TableCell>
+                        <TableCell className="text-right pr-6 py-3">
+                          <span className="text-[10px] text-muted-foreground italic">Cannot remove owner</span>
+                        </TableCell>
+                      </TableRow>
+                      {(workspace?.collaborators || []).map((email, idx) => (
+                        <TableRow key={idx} className="border-border">
+                          <TableCell className="py-3">
+                            <div className="flex items-center gap-2">
+                              <Mail className="h-4 w-4 text-muted-foreground" />
+                              <span className="text-sm font-medium">{email}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-3">
+                            <Badge className="rounded-full bg-slate-100 text-slate-600 border border-slate-200 font-bold text-[10px]">Member</Badge>
+                          </TableCell>
+                          <TableCell className="text-right pr-6 py-3">
+                            {user?.subscription?.plan === 'Agency' && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 rounded-lg text-rose-500 hover:text-rose-600 hover:bg-rose-50"
+                                onClick={() => {
+                                  if (!workspace) return;
+                                  const updated = (workspace.collaborators || []).filter(e => e !== email);
+                                  api.updateWorkspace(workspace.id, { collaborators: updated });
+                                  window.dispatchEvent(new CustomEvent('refresh-workspaces'));
+                                  toast.success('Collaborator removed');
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {(!workspace?.collaborators || workspace.collaborators.length === 0) && (
+                        <TableRow>
+                          <TableCell colSpan={3} className="text-center py-8 text-muted-foreground text-sm">
+                            No team members yet. Invite collaborators below.
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+
+              {user?.subscription?.plan === 'Agency' && (workspace?.collaborators?.length || 0) < 5 && (
+                <div className="space-y-3 p-6 bg-background/50 rounded-2xl border border-dashed border-border">
+                  <div className="flex items-center gap-2">
+                    <UserPlus className="h-5 w-5 text-muted-foreground" />
+                    <Label className="text-sm font-bold text-foreground">Invite Collaborator</Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Enter the email of the person you want to add to this workspace.</p>
+                  <div className="flex gap-3">
+                    <Input
+                      placeholder="colleague@email.com"
+                      className="rounded-xl h-11 border-border bg-background flex-1"
+                      id="invite-email"
+                    />
+                    <Button
+                      className="rounded-xl h-11 px-6 bg-brand text-brand-foreground hover:bg-brand/90 font-bold"
+                      onClick={() => {
+                        const input = document.getElementById('invite-email') as HTMLInputElement;
+                        const email = input?.value?.trim();
+                        if (!email || !email.includes('@')) {
+                          toast.error('Please enter a valid email');
+                          return;
+                        }
+                        if (!workspace) return;
+                        const current = workspace.collaborators || [];
+                        if (current.includes(email)) {
+                          toast.error('Already a collaborator');
+                          return;
+                        }
+                        if (current.length >= 5) {
+                          toast.error('Maximum 5 collaborators reached');
+                          return;
+                        }
+                        api.updateWorkspace(workspace.id, { collaborators: [...current, email] });
+                        window.dispatchEvent(new CustomEvent('refresh-workspaces'));
+                        input.value = '';
+                        toast.success('Collaborator added');
+                      }}
+                    >
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      Invite
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

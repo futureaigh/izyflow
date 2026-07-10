@@ -12,6 +12,7 @@ import { Settings } from './components/Settings';
 import { Subscription } from './components/Subscription';
 import { Calculator } from './components/Calculator';
 import { Catalog } from './components/Catalog';
+import { Clients } from './components/Clients';
 import { Receipts } from './components/Receipts';
 import { PublicCatalog } from './components/PublicCatalog';
 import { LandingPage } from './components/LandingPage';
@@ -486,8 +487,8 @@ export default function App({ auth }: AppProps) {
     const plan = user.subscription?.plan || 'Free';
     const limits: Record<string, number> = {
       'Free': 1,
-      'Pro': 3,
-      'Agency': Infinity
+      'Pro': 2,
+      'Agency': 10
     };
 
     if (workspaces.length >= (limits[plan] || 1)) {
@@ -817,6 +818,20 @@ export default function App({ auth }: AppProps) {
                   allocationRules={allocationRules}
                   contacts={contacts}
                   loading={isDataLoading}
+                />
+              </motion.div>
+            )}
+            {activeTab === 'clients' && (
+              <motion.div
+                key="clients"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+              >
+                <Clients
+                  workspace={activeWorkspace}
+                  contacts={contacts}
+                  invoices={invoices}
                 />
               </motion.div>
             )}

@@ -8,7 +8,7 @@ import { Label } from './ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from './ui/dialog';
-import { Plus, Trash2, FileText, Send, CheckCircle2, AlertCircle, Loader2, Download, FileSpreadsheet, Zap, Edit, Receipt, History, CreditCard, Printer, LayoutGrid, Clock, Search, Eye, Bot, BookOpen, Calendar, Users, Copy } from 'lucide-react';
+import { Plus, Trash2, FileText, Send, CheckCircle2, AlertCircle, Loader2, Download, FileSpreadsheet, Zap, Edit, Receipt, History, CreditCard, Printer, LayoutGrid, Clock, Search, Eye, Bot, BookOpen, Calendar, Users, Copy, ArrowRightLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
 import { exportToCSV, exportToExcel, exportToPDF, generateInvoicePDF, generateReceiptPDF } from '../lib/dataEngine';
@@ -60,6 +60,46 @@ export function Invoices({
 const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [paymentAccountId, setPaymentAccountId] = useState<string>('');
   const [scenario, setScenario] = useState('');
+  const [movingInvoiceId, setMovingInvoiceId] = useState<string | null>(null);
+  const [moveTargetWsId, setMoveTargetWsId] = useState('');
+  const [isMoving, setIsMoving] = useState(false);
+
+  const handleMoveInvoice = async () => {
+    if (!workspace || !movingInvoiceId || !moveTargetWsId) return;
+    if (moveTargetWsId === workspace.id) {
+      toast.error('Target workspace is the same as current');
+      return;
+    }
+    setIsMoving(true);
+    try {
+      const inv = invoices.find(i => i.id === movingInvoiceId);
+      if (!inv) throw new Error('Invoice not found');
+      const txs = await api.getTransactions(workspace.id);
+      const relatedTxs = txs.filter((t: any) => t.invoiceId === movingInvoiceId);
+
+      await api.createInvoice(moveTargetWsId, { ...inv, workspaceId: moveTargetWsId, id: undefined });
+      if (relatedTxs.length > 0) {
+        for (const tx of relatedTxs) {
+          await api.createTransaction(moveTargetWsId, { ...tx, workspaceId: moveTargetWsId, id: undefined });
+        }
+      }
+      await api.deleteInvoice(workspace.id, movingInvoiceId);
+      if (relatedTxs.length > 0) {
+        for (const tx of relatedTxs) {
+          await api.deleteTransaction(workspace.id, tx.id);
+        }
+      }
+      toast.success(`Invoice moved to ${workspaces?.find(w => w.id === moveTargetWsId)?.name || 'target'} successfully`);
+      setMovingInvoiceId(null);
+      setMoveTargetWsId('');
+      window.dispatchEvent(new CustomEvent('refresh-data'));
+    } catch (err) {
+      console.error('Move invoice error:', err);
+      toast.error('Failed to move invoice');
+    } finally {
+      setIsMoving(false);
+    }
+  };
   
   // New/Edit Invoice State
   const [clientName, setClientName] = useState('');
@@ -1448,6 +1488,15 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
                       <Button 
                         size="icon" 
                         variant="ghost" 
+                        onClick={() => { setMovingInvoiceId(invoice.id); setMoveTargetWsId(''); }}
+                        className="h-9 w-9 text-orange-600 hover:bg-orange-50/50 rounded-xl"
+                        title="Move to Workspace"
+                      >
+                        <ArrowRightLeft className="h-4 w-4" />
+                      </Button>
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
                         onClick={() => generateInvoice(invoice)}
                         className="h-9 w-9 text-blue-600 hover:bg-blue-50/50 rounded-xl"
                         title="Download PDF"
@@ -1510,6 +1559,53 @@ const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().
               </div>
             )}
           </div>
+
+          {/* Move Invoice Dialog */}
+          <Dialog open={!!movingInvoiceId} onOpenChange={(o) => { if (!o) { setMovingInvoiceId(null); setMoveTargetWsId(''); }}}>
+            <DialogContent className="sm:max-w-[425px] rounded-3xl bg-card border-border shadow-2xl">
+              <DialogHeader>
+                <DialogTitle className="text-2xl font-black flex items-center gap-2">
+                  <ArrowRightLeft className="h-6 w-6 text-orange-600" />
+                  Move Invoice
+                </DialogTitle>
+                <DialogDescription className="font-semibold text-muted-foreground">
+                  Transfer this invoice to another workspace. The invoice and its payment transactions will be moved.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <Label className="text-xs font-black uppercase tracking-wider text-muted-foreground">Destination Workspace</Label>
+                <div className="relative">
+                  <select
+                    value={moveTargetWsId}
+                    onChange={(e) => setMoveTargetWsId(e.target.value)}
+                    className="w-full rounded-xl border border-border bg-background/50 px-3 h-11 text-sm focus:outline-none appearance-none"
+                  >
+                    <option value="">Select workspace...</option>
+                    {(workspaces || []).filter(w => w.id !== workspace?.id).map(ws => (
+                      <option key={ws.id} value={ws.id}>{ws.name} ({ws.type})</option>
+                    ))}
+                  </select>
+                </div>
+                {moveTargetWsId && (
+                  <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl">
+                    <p className="text-xs font-bold text-amber-800">
+                      ⚠️ The invoice and all related transactions will be deleted from the current workspace after the move.
+                    </p>
+                  </div>
+                )}
+              </div>
+              <DialogFooter className="gap-2">
+                <Button variant="outline" onClick={() => { setMovingInvoiceId(null); setMoveTargetWsId(''); }} className="rounded-xl h-11 px-6 font-bold">Cancel</Button>
+                <Button 
+                  onClick={handleMoveInvoice}
+                  disabled={!moveTargetWsId || isMoving}
+                  className="rounded-xl h-11 px-6 bg-orange-600 hover:bg-orange-700 text-white font-bold"
+                >
+                  {isMoving ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Moving...</> : 'Move Invoice'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           {/* Catalog Selection Dialog */}
           <Dialog open={isSelectingFromCatalog} onOpenChange={setIsSelectingFromCatalog}>
