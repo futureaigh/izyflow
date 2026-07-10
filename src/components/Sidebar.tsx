@@ -19,7 +19,8 @@ import {
   HelpCircle,
   MessageCircle,
   BookOpen,
-  Receipt
+  Receipt,
+  Users
 } from 'lucide-react';
 import { 
   DropdownMenu, 
@@ -65,6 +66,7 @@ export function Sidebar({
     { id: 'invoices', label: 'Invoices', icon: ReceiptText, businessOnly: true },
     { id: 'receipts', label: 'Staff Receipts', icon: Receipt, businessOnly: true },
     { id: 'accounts', label: 'Accounts', icon: Wallet },
+    { id: 'clients', label: 'Clients', icon: Users },
     { id: 'calculator', label: 'Price Calculator', icon: CalculatorIcon, businessOnly: true },
     { id: 'catalog', label: 'Catalog', icon: BookOpen, businessOnly: true },
     { id: 'settings', label: 'Settings', icon: SettingsIcon },

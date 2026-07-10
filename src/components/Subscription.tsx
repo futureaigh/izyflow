@@ -55,7 +55,7 @@ export function Subscription({ workspace, user }: SubscriptionProps) {
       price: 'GH₵ 0',
       description: 'Perfect for freelancers and solo entrepreneurs starting out.',
       features: [
-        'Up to 5 Invoices / month',
+        'Up to 10 Invoices / month',
         '1 Workspace',
         'Basic Expense Tracking',
         'GHS Currency Only',
@@ -68,9 +68,9 @@ export function Subscription({ workspace, user }: SubscriptionProps) {
       price: 'GH₵ 79',
       description: 'For growing businesses that need advanced financial tools.',
       features: [
-        'Unlimited Invoices',
-        '3 Workspaces',
-        'Full Pricing Engine',
+        'Up to 50 Invoices / month',
+        '2 Workspaces',
+        'Clients & CRM Database',
         'Multi-currency (USD, GBP, EUR)',
         'Advanced Analytics',
         'Priority Email Support'
@@ -83,9 +83,11 @@ export function Subscription({ workspace, user }: SubscriptionProps) {
       price: 'GH₵ 450',
       description: 'Complete financial operating system for teams and agencies.',
       features: [
-        'Unlimited Everything',
-        'Unlimited Workspaces',
+        'Unlimited Invoices / month',
+        '10 Workspaces',
         'Team Collaboration (5 seats)',
+        'Clients & CRM Database',
+        'Interactive Price Calculator',
         'Custom Branding',
         'Automated Overdue Reminders',
         'Dedicated Account Manager'
