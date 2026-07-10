@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { api } from '../lib/api';
 import { Workspace, Transaction, TransactionType, UserProfile, Account, AllocationRule, Contact } from '../types';
 import { cn, getFinancialFlags, parseLocalDate } from '../lib/utils';
@@ -171,30 +171,30 @@ export function Transactions({
     }
   }, [editingTransaction, accounts, workspace]);
 
-  // Auto-classification logic
-  useEffect(() => {
-    if (editingTransaction || !description) return;
+  const autoClassify = useCallback((desc: string) => {
+    if (!desc) return;
+    const d = desc.toLowerCase();
+    let detectedType: TransactionType | null = null;
+    let detectedLoan = false;
 
-    const desc = description.toLowerCase();
-    
-    // Loan detection
-    if (desc.includes('loan') || desc.includes('borrowed') || desc.includes('repay')) {
-      setIsLoan(true);
+    if (d.includes('loan') || d.includes('borrowed') || d.includes('repay')) {
+      detectedLoan = true;
     }
 
-    // Type detection
-    if (desc.includes('sale') || desc.includes('client') || desc.includes('consulting') || desc.includes('revenue')) {
-      setType('Income');
-    } else if (desc.includes('salary') || desc.includes('payroll')) {
-      setType('Income');
-    } else if (desc.includes('rent') || desc.includes('software') || desc.includes('aws') || desc.includes('marketing')) {
-      setType('Expense');
-    } else if (desc.includes('food') || desc.includes('grocery') || desc.includes('dinner') || desc.includes('movie') || desc.includes('personal')) {
-      setType('Expense');
-    } else if (desc.includes('stock') || desc.includes('crypto') || desc.includes('bitcoin') || desc.includes('real estate')) {
-      setType('Investment');
+    if (d.includes('sale') || d.includes('client') || d.includes('consulting') || d.includes('revenue') ||
+        d.includes('salary') || d.includes('payroll')) {
+      detectedType = 'Income';
+    } else if (d.includes('rent') || d.includes('software') || d.includes('aws') || d.includes('marketing') ||
+               d.includes('food') || d.includes('grocery') || d.includes('dinner') || d.includes('movie') || d.includes('personal')) {
+      detectedType = 'Expense';
+    } else if (d.includes('stock') || d.includes('crypto') || d.includes('bitcoin') || d.includes('real estate')) {
+      detectedType = 'Investment';
     }
-  }, [description, editingTransaction]);
+
+    if (detectedType) setType(detectedType);
+    // ponytail: Investment + loan is contradictory, skip loan flag
+    if (detectedLoan && detectedType !== 'Investment') setIsLoan(true);
+  }, []);
 
   useEffect(() => {
     if (!workspace) return;
@@ -311,9 +311,6 @@ export function Transactions({
 
   const bulkDeleteTransactions = async () => {
     if (!workspace || selectedTransactions.length === 0) return;
-    
-    const confirmDelete = window.confirm(`Are you sure you want to delete ${selectedTransactions.length} transactions? This action cannot be undone.`);
-    if (!confirmDelete) return;
 
     setIsDeletingBulk(true);
     try {
@@ -577,16 +574,36 @@ export function Transactions({
 
           <div className="flex items-center gap-3">
             {selectedTransactions.length > 0 && (
-              <Button 
-                variant="destructive" 
-                size="sm"
-                onClick={bulkDeleteTransactions}
-                disabled={isDeletingBulk}
-                className="rounded-xl h-12 px-4 font-bold flex items-center gap-2 animate-in fade-in slide-in-from-right-4"
-              >
-                {isDeletingBulk ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                <span>Delete ({selectedTransactions.length})</span>
-              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger render={
+                  <Button 
+                    variant="destructive" 
+                    size="sm"
+                    disabled={isDeletingBulk}
+                    className="rounded-xl h-12 px-4 font-bold flex items-center gap-2 animate-in fade-in slide-in-from-right-4"
+                  >
+                    {isDeletingBulk ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    <span>Delete ({selectedTransactions.length})</span>
+                  </Button>
+                } />
+                <AlertDialogContent className="rounded-3xl border-2 border-rose-100 shadow-2xl">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="text-2xl font-black text-slate-900">Delete {selectedTransactions.length} Transactions?</AlertDialogTitle>
+                    <AlertDialogDescription className="text-slate-600 font-medium leading-relaxed">
+                      This will permanently remove these transactions and reverse their account balances. This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter className="gap-3 sm:gap-0 mt-4">
+                    <AlertDialogCancel render={<Button variant="outline" className="rounded-2xl border-2 border-slate-200 font-bold hover:bg-slate-50 transition-all" />}>Go Back</AlertDialogCancel>
+                    <AlertDialogAction 
+                      onClick={bulkDeleteTransactions} 
+                      className="rounded-2xl bg-rose-600 hover:bg-rose-700 font-bold shadow-lg shadow-rose-200 transition-all active:scale-95"
+                    >
+                      Yes, Delete All
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             )}
             <div className="flex-1 sm:flex-none">
               <ImportTool workspace={workspace} />
@@ -631,41 +648,44 @@ export function Transactions({
                     ))}
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Is this a Loan?</Label>
-                  <div className="flex items-center h-12 gap-2">
-                      <input 
-                        type="checkbox" 
-                        id="isLoan"
-                        checked={isLoan}
-                        onChange={(e) => setIsLoan(e.target.checked)}
-                        className="h-5 w-5 rounded border-border text-blue-600 focus:ring-blue-500"
-                      />
-                      <Label htmlFor="isLoan" className="text-sm font-medium cursor-pointer">Yes, it's a loan</Label>
-                    </div>
-                  </div>
-                  {isLoan && (
-                    <div className="space-y-2">
-                      <Label className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Loan Type</Label>
-                      <div className="flex items-center gap-2 bg-muted/50 p-1 rounded-xl border border-border">
-                        {['Loan', 'Repayment'].map((s) => (
-                          <Button
-                            key={s}
-                            type="button"
-                            variant={loanStatus === s ? 'default' : 'ghost'}
-                            onClick={() => setLoanStatus(s as any)}
-                            className={cn(
-                              "flex-1 rounded-lg font-bold h-10 text-xs transition-all",
-                              loanStatus === s ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:bg-background/50"
-                            )}
-                          >
-                            {s}
-                          </Button>
-                        ))}
+                {type !== 'Investment' && (<>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Is this a Loan?</Label>
+                    <div className="flex items-center h-12 gap-2">
+                        <input 
+                          type="checkbox" 
+                          id="isLoan"
+                          checked={isLoan}
+                          onChange={(e) => setIsLoan(e.target.checked)}
+                          className="h-5 w-5 rounded border-border text-blue-600 focus:ring-blue-500"
+                        />
+                        <Label htmlFor="isLoan" className="text-sm font-medium cursor-pointer">Yes, it's a loan</Label>
                       </div>
                     </div>
-                  )}
-                </div>
+                    {isLoan && (
+                      <div className="space-y-2">
+                        <Label className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Loan Type</Label>
+                        <div className="flex items-center gap-2 bg-muted/50 p-1 rounded-xl border border-border">
+                          {['Loan', 'Repayment'].map((s) => (
+                            <Button
+                              key={s}
+                              type="button"
+                              variant={loanStatus === s ? 'default' : 'ghost'}
+                              onClick={() => setLoanStatus(s as any)}
+                              className={cn(
+                                "flex-1 rounded-lg font-bold h-10 text-xs transition-all",
+                                loanStatus === s ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:bg-background/50"
+                              )}
+                            >
+                              {s}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Amount</Label>
@@ -825,6 +845,7 @@ export function Transactions({
                       placeholder="Optional details..." 
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
+                      onBlur={(e) => autoClassify(e.target.value)}
                       className="h-12 rounded-xl border-border bg-background"
                     />
                   </div>
@@ -899,6 +920,7 @@ export function Transactions({
               )}
             </select>
           </div>
+          {filterType !== 'Investment' && (
           <div className="space-y-1.5">
             <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider ml-1">Is Loan?</Label>
             <select 
@@ -911,6 +933,7 @@ export function Transactions({
               <option value="No">No (Normal)</option>
             </select>
           </div>
+          )}
           <div className="space-y-1.5">
             <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider ml-1">Period</Label>
             <select 
@@ -1001,7 +1024,7 @@ export function Transactions({
               <p className="text-sm font-black text-slate-700">
                 {workspace.currency} {(
                   filteredTransactions.filter(t => t.type === 'Income').reduce((sum, t) => sum + (t.amount || 0), 0) - 
-                  filteredTransactions.filter(t => t.type === 'Expense' || t.type === 'Investment').reduce((sum, t) => sum + (t.amount || 0), 0)
+                  filteredTransactions.filter(t => t.type === 'Expense').reduce((sum, t) => sum + (t.amount || 0), 0)
                 ).toLocaleString()}
               </p>
             </div>
