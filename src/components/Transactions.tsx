@@ -386,9 +386,18 @@ export function Transactions({
   }), [transactions, searchQuery, filterType, filterCategory, filterIsLoan, startDate, endDate]);
 
   const sortedTransactions = useMemo(() => 
-    [...filteredTransactions].sort((a, b) =>
-      sortOrder === 'desc' ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date)
-    ),
+    [...filteredTransactions].sort((a, b) => {
+      const timeA = a.time || '00:00';
+      const timeB = b.time || '00:00';
+      const datetimeA = `${a.date}T${timeA}`;
+      const datetimeB = `${b.date}T${timeB}`;
+      
+      if (sortOrder === 'desc') {
+        return datetimeB.localeCompare(datetimeA) || (b.createdAt || '').localeCompare(a.createdAt || '');
+      } else {
+        return datetimeA.localeCompare(datetimeB) || (a.createdAt || '').localeCompare(b.createdAt || '');
+      }
+    }),
     [filteredTransactions, sortOrder]
   );
 
