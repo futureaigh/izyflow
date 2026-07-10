@@ -46,8 +46,8 @@ function safeParse(str: string | null | undefined) {
   }
 }
 
-const INVITE_SECRET = process.env.JWT_INVITE_SECRET || crypto.randomUUID();
-const resend = new Resend(process.env.RESEND_API_KEY || "re_placeholder");
+const INVITE_SECRET = process.env.JWT_INVITE_SECRET;
+const resend = new Resend(process.env.RESEND_API_KEY!);
 const APP_URL = process.env.APP_URL || "http://localhost:3000";
 
 async function startServer() {
@@ -727,7 +727,7 @@ async function startServer() {
       if (collaborators.includes(email)) return res.status(400).json({ error: "Already a collaborator" });
       if (email === owner?.email) return res.status(400).json({ error: "Cannot invite yourself" });
 
-      const token = jwt.sign({ workspaceId: id, email, inviter: owner?.displayName || "Workspace Owner", iat: Math.floor(Date.now() / 1000) }, INVITE_SECRET, { expiresIn: "7d" });
+      const token = jwt.sign({ workspaceId: id, email }, INVITE_SECRET, { expiresIn: "7d" });
 
       await resend.emails.send({
         from: process.env.RESEND_FROM_EMAIL || "noreply@myizyflow.com",

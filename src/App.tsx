@@ -118,7 +118,6 @@ export default function App({ auth }: AppProps) {
   });
   const [isConfigLoading, setIsConfigLoading] = useState(true);
   const [isAdminPortal, setIsAdminPortal] = useState(false);
-  const [isAcceptInvite, setIsAcceptInvite] = useState(false);
 
   // Cache CMS config when it changes
   useEffect(() => {
@@ -203,9 +202,6 @@ export default function App({ auth }: AppProps) {
   useEffect(() => {
     if (window.location.pathname === '/admin-portal') {
       setIsAdminPortal(true);
-    }
-    if (window.location.pathname === '/accept-invite') {
-      setIsAcceptInvite(true);
     }
     if (window.location.pathname.startsWith('/catalog/')) {
       const id = window.location.pathname.split('/')[2];
@@ -550,7 +546,7 @@ export default function App({ auth }: AppProps) {
     );
   }
 
-  if (isAcceptInvite) {
+  if (typeof window !== 'undefined' && window.location.pathname === '/accept-invite') {
     return (
       <>
         <AcceptInvite />
