@@ -185,6 +185,28 @@ export function Dashboard({
     setDisplayCurrency(workspace.currency);
   }, [workspace]);
 
+  useEffect(() => {
+    if (!workspace?.enableAutomatedReminders) return;
+    const now = new Date();
+    const overdue = invoices.filter(inv => {
+      if (inv.status !== 'Overdue' && inv.status !== 'Sent') return false;
+      if (!inv.dueDate) return false;
+      const due = new Date(inv.dueDate);
+      if (due >= now) return false;
+      if (inv.lastAutomatedReminderSentAt) {
+        const lastSent = new Date(inv.lastAutomatedReminderSentAt);
+        const daysSince = (now.getTime() - lastSent.getTime()) / 86400000;
+        if (daysSince < 7) return false;
+      }
+      return true;
+    });
+    overdue.forEach(inv => {
+      api.updateInvoice(workspace.id, inv.id, { lastAutomatedReminderSentAt: now.toISOString() }).then(() => {
+        toast.warning(`Overdue: ${inv.clientName} — ${displayCurrency} ${inv.amount?.toLocaleString()} overdue since ${new Date(inv.dueDate).toLocaleDateString()}`);
+      });
+    });
+  }, [workspace?.enableAutomatedReminders, invoices]);
+
   const handleExport = async (formatType: 'csv' | 'excel' | 'pdf') => {
     if (!workspace || filteredTransactions.length === 0) {
       toast.error('No data to export for selected period');
@@ -205,7 +227,7 @@ export function Dashboard({
 
       if (formatType === 'csv') exportToCSV(data, fileName);
       else if (formatType === 'excel') exportToExcel(data, fileName);
-      else exportToPDF(data, fileName, `${period.replace('-', ' ').toUpperCase()} Transactions`);
+      else exportToPDF(data, fileName, `${period.replace('-', ' ').toUpperCase()} TRANSACTIONS`);
       
       toast.success(`Exported to ${formatType.toUpperCase()}`);
     } catch (error) {
@@ -654,28 +676,6 @@ export function Dashboard({
   ];
 
   const salesTarget = workspace?.salesTarget || 0;
-
-  useEffect(() => {
-    if (!workspace?.enableAutomatedReminders) return;
-    const now = new Date();
-    const overdue = invoices.filter(inv => {
-      if (inv.status !== 'Overdue' && inv.status !== 'Sent') return false;
-      if (!inv.dueDate) return false;
-      const due = new Date(inv.dueDate);
-      if (due >= now) return false;
-      if (inv.lastAutomatedReminderSentAt) {
-        const lastSent = new Date(inv.lastAutomatedReminderSentAt);
-        const daysSince = (now.getTime() - lastSent.getTime()) / 86400000;
-        if (daysSince < 7) return false;
-      }
-      return true;
-    });
-    overdue.forEach(inv => {
-      api.updateInvoice(workspace.id, inv.id, { lastAutomatedReminderSentAt: now.toISOString() }).then(() => {
-        toast.warning(`Overdue: ${inv.clientName} — ${displayCurrency} ${inv.amount?.toLocaleString()} overdue since ${new Date(inv.dueDate).toLocaleDateString()}`);
-      });
-    });
-  }, [workspace?.enableAutomatedReminders, invoices]);
 
   return (
     <div className="space-y-8 pb-12">
