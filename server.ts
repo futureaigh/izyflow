@@ -16,7 +16,7 @@ import {
   staff, staffReceipts, cmsConfigs, analytics, appErrors,
   subscriptionPlans, subscriptions, paymentTransactions
 } from "./src/db/schema";
-import { eq, and, desc, sql, gte, lte } from "drizzle-orm";
+import { eq, and, desc, sql, gte } from "drizzle-orm";
 import { withCache, invalidateCache, buildCacheKey, rateLimit } from "./src/lib/redis";
 
 
@@ -311,10 +311,11 @@ async function startServer() {
       const [user] = await db.select().from(users).where(eq(users.email, customer.email));
       if (!user) return res.status(404).send("User not found");
 
-      const planName = metadata?.plan || "Pro";
+      const raw = typeof metadata === "string" ? safeParse(metadata) : metadata;
+      const planName = raw?.plan || "Pro";
       await upsertSubscription(user.uid, planName, "Active", reference, amount, currency);
       console.log(`✅ Subscription activated via webhook: ${user.email} → ${planName}`);
-      res.send(200);
+      res.sendStatus(200);
     } catch (error) {
       console.error("❌ Paystack webhook error:", error);
       res.status(500).send("Internal error");
@@ -338,7 +339,15 @@ async function startServer() {
 
       if (result.status && result.data?.status === "success") {
         const { amount, currency, metadata } = result.data;
-        const planName = metadata?.plan || "Pro";
+        const raw = typeof metadata === "string" ? safeParse(metadata) : metadata;
+        const planName = raw?.plan || "Pro";
+
+        // Verify paid amount matches expected plan price
+        const [plan] = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.name, planName));
+        if (plan && amount !== plan.price) {
+          console.warn(`⚠️ Amount mismatch for ${planName}: expected ${plan.price}, got ${amount}`);
+        }
+
         await upsertSubscription(userId, planName, "Active", reference, amount, currency);
         return res.json({ status: true, plan: planName });
       }
