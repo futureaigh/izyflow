@@ -83,7 +83,7 @@ export function Transactions({
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [time, setTime] = useState(new Date().toTimeString().split(' ')[0].slice(0, 5));
   const [isLoan, setIsLoan] = useState(false);
-  const [loanStatus, setLoanStatus] = useState<'Loan' | 'Repayment'>('Loan');
+  const [loanStatus, setLoanStatus] = useState<'Loan' | 'Repayment' | ''>('');
   const [accountId, setAccountId] = useState('');
   const [targetWorkspaceId, setTargetWorkspaceId] = useState('');
   const [allocationRules, setAllocationRules] = useState<AllocationRule[]>([]);
@@ -147,7 +147,7 @@ export function Transactions({
       setDate(editingTransaction.date);
       setTime(editingTransaction.time || '');
       setIsLoan(editingTransaction.isLoan || false);
-      setLoanStatus(editingTransaction.loanStatus || 'Loan');
+      setLoanStatus(editingTransaction.isLoan ? (editingTransaction.loanStatus || 'Loan') : '');
       setAccountId(editingTransaction.accountId || '');
       setTargetWorkspaceId(editingTransaction.workspaceId || workspace?.id || '');
     } else {
@@ -237,9 +237,9 @@ export function Transactions({
     }
 
     try {
-      const flags = getFinancialFlags({ type, isLoan, loanStatus });
+      const flags = getFinancialFlags({ type, isLoan });
       
-      const transactionData = {
+      const transactionData: Record<string, any> = {
         id: editingTransaction ? editingTransaction.id : (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2)),
         workspaceId: targetWorkspaceId || workspace.id,
         type,
@@ -251,11 +251,11 @@ export function Transactions({
         description,
         payeePayer,
         isLoan,
-        loanStatus,
         accountId,
         ...flags,
         savePayeeAsContact // Handled on backend
       };
+      if (isLoan) transactionData.loanStatus = loanStatus;
 
       if (editingTransaction) {
         if (targetWorkspaceId && targetWorkspaceId !== workspace.id) {
@@ -955,7 +955,7 @@ export function Transactions({
             <div>
               <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Real Income</p>
               <p className="text-sm font-black text-emerald-700">
-                {workspace.currency} {filteredTransactions.filter(t => t.type === 'Income' && t.loanStatus !== 'Loan' && t.loanStatus !== 'Repayment').reduce((sum, t) => sum + (t.amount || 0), 0).toLocaleString()}
+                {workspace.currency} {filteredTransactions.filter(t => t.type === 'Income' && !t.isLoan).reduce((sum, t) => sum + (t.amount || 0), 0).toLocaleString()}
               </p>
             </div>
           </div>
@@ -966,7 +966,7 @@ export function Transactions({
             <div>
               <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Loans Received</p>
               <p className="text-sm font-black text-blue-700">
-                {workspace.currency} {filteredTransactions.filter(t => t.type === 'Income' && t.loanStatus === 'Loan').reduce((sum, t) => sum + (t.amount || 0), 0).toLocaleString()}
+                {workspace.currency} {filteredTransactions.filter(t => t.type === 'Income' && t.isLoan && t.loanStatus === 'Loan').reduce((sum, t) => sum + (t.amount || 0), 0).toLocaleString()}
               </p>
             </div>
           </div>
@@ -977,7 +977,7 @@ export function Transactions({
             <div>
               <p className="text-[10px] font-bold text-rose-600 uppercase tracking-wider">Total Spending</p>
               <p className="text-sm font-black text-rose-700">
-                {workspace.currency} {filteredTransactions.filter(t => t.type === 'Expense' && t.loanStatus !== 'Loan' && t.loanStatus !== 'Repayment').reduce((sum, t) => sum + (t.amount || 0), 0).toLocaleString()}
+                {workspace.currency} {filteredTransactions.filter(t => t.type === 'Expense' && !t.isLoan).reduce((sum, t) => sum + (t.amount || 0), 0).toLocaleString()}
               </p>
             </div>
           </div>

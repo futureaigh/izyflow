@@ -31,21 +31,11 @@ export function generateId() {
 export function getFinancialFlags(t: Partial<Transaction>) {
   const type = t.type;
   const isLoan = t.isLoan || false;
-  const loanStatus = t.loanStatus || 'Loan';
 
   return {
-    // Transfers don't affect net cash flow.
     affects_cash: type !== 'Transfer',
-    
-    // Profit only includes income/expenses that are NOT loans or repayments.
-    affects_profit: (type === 'Income' || type === 'Expense') && 
-                    !isLoan && 
-                    loanStatus !== 'Loan' && 
-                    loanStatus !== 'Repayment',
-    
+    affects_profit: (type === 'Income' || type === 'Expense') && !isLoan,
     affects_investment: type === 'Investment',
-    
-    // Debt is affected by any transaction marked as a loan or repayment.
     affects_debt: isLoan === true
   };
 }
