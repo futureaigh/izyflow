@@ -111,6 +111,10 @@ export interface Workspace {
   onlinePaymentUrl?: string;
   brandColor?: string;
   paymentMethods?: PaymentMethod[];
+  enableInvestments?: boolean;
+  enableLoansDebts?: boolean;
+  enableAutomatedReminders?: boolean;
+  collaborators?: string[];
 }
 
 export interface Account {
@@ -160,6 +164,8 @@ export interface Invoice {
   discountValue?: number;
   subtotal?: number;
   notes?: string;
+  invoiceNumber?: string;
+  lastAutomatedReminderSentAt?: string;
 }
 
 export interface Transaction {
@@ -292,6 +298,7 @@ export interface Contact {
   id: string;
   workspaceId: string;
   name: string;
+  businessName?: string;
   email?: string;
   phone?: string;
   type?: 'Payer' | 'Payee' | 'Both';

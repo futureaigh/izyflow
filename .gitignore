@@ -30,3 +30,4 @@ performance-*.json
 /src/performance-init*.js
 vite.config.*.js
 izyo/
+GAI workflow/
