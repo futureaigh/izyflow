@@ -36,6 +36,8 @@ export const api = {
   createWorkspace: (data: any) => fetchAPI("/api/workspaces", { method: "POST", body: JSON.stringify(data) }),
   updateWorkspace: (id: string, data: any) => fetchAPI(`/api/workspaces/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteWorkspace: (id: string) => fetchAPI(`/api/workspaces/${id}`, { method: "DELETE" }),
+  inviteCollaborator: (id: string, email: string) => fetchAPI(`/api/workspaces/${id}/invite`, { method: "POST", body: JSON.stringify({ email }) }),
+  acceptInvite: (token: string) => fetchAPI("/api/workspaces/accept-invite", { method: "POST", body: JSON.stringify({ token }) }),
 
   // Accounts
   getAccounts: (wsId: string) => fetchAPI(`/api/workspaces/${wsId}/accounts`),

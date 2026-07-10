@@ -18,6 +18,7 @@ import { PublicCatalog } from './components/PublicCatalog';
 import { LandingPage } from './components/LandingPage';
 import { AuthModal } from './components/AuthModal';
 import { AdminPortal } from './components/AdminPortal';
+import { AcceptInvite } from './components/AcceptInvite';
 import { SupportChat } from './components/SupportChat';
 import { IzyAssistant } from './components/IzyAssistant';
 import { IzyBubble } from './components/IzyBubble';
@@ -117,6 +118,7 @@ export default function App({ auth }: AppProps) {
   });
   const [isConfigLoading, setIsConfigLoading] = useState(true);
   const [isAdminPortal, setIsAdminPortal] = useState(false);
+  const [isAcceptInvite, setIsAcceptInvite] = useState(false);
 
   // Cache CMS config when it changes
   useEffect(() => {
@@ -201,6 +203,9 @@ export default function App({ auth }: AppProps) {
   useEffect(() => {
     if (window.location.pathname === '/admin-portal') {
       setIsAdminPortal(true);
+    }
+    if (window.location.pathname === '/accept-invite') {
+      setIsAcceptInvite(true);
     }
     if (window.location.pathname.startsWith('/catalog/')) {
       const id = window.location.pathname.split('/')[2];
@@ -540,6 +545,15 @@ export default function App({ auth }: AppProps) {
     return (
       <>
         <PublicCatalog workspaceId={publicWorkspaceId} />
+        <Toaster position="top-right" />
+      </>
+    );
+  }
+
+  if (isAcceptInvite) {
+    return (
+      <>
+        <AcceptInvite />
         <Toaster position="top-right" />
       </>
     );
