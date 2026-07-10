@@ -729,7 +729,7 @@ async function startServer() {
 
       const token = jwt.sign({ workspaceId: id, email }, INVITE_SECRET, { expiresIn: "7d" });
 
-      await resend.emails.send({
+      const { error: sendError } = await resend.emails.send({
         from: process.env.RESEND_FROM_EMAIL || "noreply@myizyflow.com",
         to: email,
         subject: `${owner?.displayName || "Someone"} invited you to ${ws.name} on IzyFlow`,
@@ -740,6 +740,10 @@ async function startServer() {
           <p style="color:#666;font-size:13px">This link expires in 7 days.</p>
         </div>`,
       });
+      if (sendError) {
+        console.error("Resend error:", sendError);
+        return res.status(500).json({ error: "Failed to send invitation" });
+      }
 
       res.json({ message: "Invitation sent" });
     } catch (err) {
