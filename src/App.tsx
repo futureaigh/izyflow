@@ -371,29 +371,18 @@ export default function App({ auth }: AppProps) {
     if (reference && user) {
       const verifyPayment = async () => {
         try {
-          const response = await fetch(`/api/paystack/verify/${reference}`);
+          const response = await fetch('/api/paystack/verify-payment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reference }),
+          });
           const data = await response.json();
 
-          if (data.status && data.data.status === 'success') {
-            const plan = data.data.metadata?.plan;
-            if (plan) {
-              const expiryDate = new Date();
-              expiryDate.setMonth(expiryDate.getMonth() + 1);
-
-              const updatedProfile = await api.updateProfile({
-                subscription: {
-                  plan,
-                  status: 'Active',
-                  expiryDate: expiryDate.toISOString()
-                }
-              });
-
-              setUser(updatedProfile);
-              toast.success(`Successfully upgraded to ${plan} plan!`);
-              window.history.replaceState({}, '', '/');
-            }
+          if (data.status) {
+            toast.success(`Successfully upgraded to ${data.plan} plan!`);
+            window.history.replaceState({}, '', '/');
           } else {
-            toast.error('Payment verification failed');
+            toast.error(data.message || 'Payment verification failed');
           }
         } catch (error) {
           console.error('Error verifying payment:', error);
