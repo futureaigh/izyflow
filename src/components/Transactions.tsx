@@ -90,6 +90,7 @@ export function Transactions({
   const [selectedTransactions, setSelectedTransactions] = useState<string[]>([]);
   const [isDeletingBulk, setIsDeletingBulk] = useState(false);
   const [savePayeeAsContact, setSavePayeeAsContact] = useState(false);
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
 
   // Calculated suggestions for Payee/Payer
   const suggestedPayees = useMemo(() => {
@@ -384,9 +385,13 @@ export function Transactions({
     return matchesSearch && matchesType && matchesCategory && matchesIsLoan && matchesStart && matchesEnd;
   });
 
+  const sortedTransactions = [...filteredTransactions].sort((a, b) =>
+    sortOrder === 'desc' ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date)
+  );
+
   // Pagination Logic
-  const totalPages = Math.ceil(filteredTransactions.length / rowsPerPage);
-  const paginatedTransactions = filteredTransactions.slice(
+  const totalPages = Math.ceil(sortedTransactions.length / rowsPerPage);
+  const paginatedTransactions = sortedTransactions.slice(
     (currentPage - 1) * rowsPerPage,
     currentPage * rowsPerPage
   );
@@ -867,7 +872,7 @@ export function Transactions({
 
     {/* Filtering UI */}
       <div className="space-y-4 mb-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4 bg-card/30 p-4 rounded-2xl border border-border/50">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-8 gap-4 bg-card/30 p-4 rounded-2xl border border-border/50">
           <div className="space-y-1.5">
             <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider ml-1">Search</Label>
             <Input 
@@ -966,6 +971,17 @@ export function Transactions({
               onChange={(e) => setEndDate(e.target.value)}
               className="h-10 rounded-xl border-border bg-background/50"
             />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider ml-1">Sort</Label>
+            <select 
+              className="w-full rounded-xl border border-border bg-background/50 px-3 h-10 text-sm focus:outline-none"
+              value={sortOrder}
+              onChange={(e) => { setSortOrder(e.target.value as 'desc' | 'asc'); setCurrentPage(1); }}
+            >
+              <option value="desc">Newest First</option>
+              <option value="asc">Oldest First</option>
+            </select>
           </div>
         </div>
 
