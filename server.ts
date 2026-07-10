@@ -5,6 +5,7 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import cors from "cors";
+import crypto from "crypto";
 import { clerkMiddleware, getAuth, clerkClient } from "@clerk/express";
 import { verifyWebhook } from "@clerk/express/webhooks";
 // Drizzle and DB imports
@@ -12,9 +13,10 @@ import { db } from "./src/db/index";
 import { 
   users, workspaces, accounts, allocationRules, transactions, 
   invoices, catalogItems, pricingCalculations, contacts, 
-  staff, staffReceipts, cmsConfigs, analytics, appErrors
+  staff, staffReceipts, cmsConfigs, analytics, appErrors,
+  subscriptionPlans, subscriptions, paymentTransactions
 } from "./src/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { withCache, invalidateCache, buildCacheKey, rateLimit } from "./src/lib/redis";
 
 
@@ -235,6 +237,115 @@ async function startServer() {
     } catch (error) {
       console.error('❌ Webhook error:', error);
       res.status(400).send('Error verifying webhook');
+    }
+  });
+
+  // ==================== PAYSTACK HELPERS ====================
+
+  function verifyPaystackSignature(req: any): boolean {
+    const signature = req.headers["x-paystack-signature"];
+    const secret = process.env.PAYSTACK_SECRET_KEY;
+    if (!secret || !signature) return false;
+    const hash = crypto.createHmac("sha512", secret).update(JSON.stringify(req.body)).digest("hex");
+    return hash === signature;
+  }
+
+  async function upsertSubscription(userId: string, planName: string, status: string, reference: string, amount: number, currency: string) {
+    const [plan] = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.name, planName));
+    if (!plan) return;
+
+    const now = new Date().toISOString();
+    const expiryDate = new Date();
+    expiryDate.setMonth(expiryDate.getMonth() + 1);
+
+    const [existingSub] = await db.select().from(subscriptions)
+      .where(and(eq(subscriptions.userId, userId), eq(subscriptions.status, "Active")))
+      .orderBy(desc(subscriptions.createdAt)).limit(1);
+
+    let subId: string;
+    if (existingSub) {
+      await db.update(subscriptions)
+        .set({ planId: plan.id, status, expiryDate: expiryDate.toISOString(), updatedAt: now })
+        .where(eq(subscriptions.id, existingSub.id));
+      subId = existingSub.id;
+    } else {
+      subId = crypto.randomUUID();
+      await db.insert(subscriptions).values({
+        id: subId, userId, planId: plan.id, status,
+        startDate: now, expiryDate: expiryDate.toISOString(),
+        createdAt: now, updatedAt: now,
+      });
+    }
+
+    await db.insert(paymentTransactions).values({
+      id: crypto.randomUUID(), userId, subscriptionId: subId,
+      reference, amount, currency, status, planName, createdAt: now,
+    });
+
+    const [user] = await db.select().from(users).where(eq(users.uid, userId));
+    const currentSub = safeParse(user?.subscription) || { plan: "Free", status: "Active" };
+    await db.update(users)
+      .set({ subscription: JSON.stringify({ ...currentSub, plan: planName, status: "Active", expiryDate: expiryDate.toISOString() }) })
+      .where(eq(users.uid, userId));
+
+    return plan;
+  }
+
+  // Paystack Webhook Endpoint
+  app.post("/api/paystack/webhook", async (req, res) => {
+    if (!verifyPaystackSignature(req)) {
+      return res.status(401).send("Invalid signature");
+    }
+
+    const event = req.body;
+    if (event.event !== "charge.success") {
+      return res.send("Event ignored");
+    }
+
+    const { reference, amount, currency, metadata, customer } = event.data || {};
+    if (!reference || !customer?.email) {
+      return res.status(400).send("Missing reference or customer email");
+    }
+
+    try {
+      const [user] = await db.select().from(users).where(eq(users.email, customer.email));
+      if (!user) return res.status(404).send("User not found");
+
+      const planName = metadata?.plan || "Pro";
+      await upsertSubscription(user.uid, planName, "Active", reference, amount, currency);
+      console.log(`✅ Subscription activated via webhook: ${user.email} → ${planName}`);
+      res.send(200);
+    } catch (error) {
+      console.error("❌ Paystack webhook error:", error);
+      res.status(500).send("Internal error");
+    }
+  });
+
+  // Paystack Verify Payment (called by frontend after callback)
+  app.post("/api/paystack/verify-payment", requireAuthMiddleware(), async (req: any, res) => {
+    const { reference } = req.body;
+    const userId = req.auth.userId;
+    const secretKey = process.env.PAYSTACK_SECRET_KEY;
+
+    if (!reference) return res.status(400).json({ error: "Missing reference" });
+    if (!secretKey) return res.status(500).json({ error: "PAYSTACK_SECRET_KEY not configured" });
+
+    try {
+      const response = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
+        headers: { Authorization: `Bearer ${secretKey}` },
+      });
+      const result = await response.json();
+
+      if (result.status && result.data?.status === "success") {
+        const { amount, currency, metadata } = result.data;
+        const planName = metadata?.plan || "Pro";
+        await upsertSubscription(userId, planName, "Active", reference, amount, currency);
+        return res.json({ status: true, plan: planName });
+      }
+      res.json({ status: false, message: result.data?.gateway_response || "Verification failed" });
+    } catch (error) {
+      console.error("Paystack verify-payment error:", error);
+      res.status(500).json({ error: "Verification failed" });
     }
   });
 
@@ -1605,6 +1716,41 @@ async function startServer() {
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
+
+  // Seed subscription plans
+  async function seedPlans() {
+    const plans = [
+      { id: "plan_free", name: "Free", price: 0, invoicesPerMonth: 10, maxWorkspaces: 1, features: JSON.stringify(["Up to 10 Invoices / month", "1 Workspace", "Basic Expense Tracking", "GHS Currency Only", "Standard Support"]) },
+      { id: "plan_pro", name: "Pro", price: 7900, invoicesPerMonth: 50, maxWorkspaces: 2, features: JSON.stringify(["Up to 50 Invoices / month", "2 Workspaces", "Clients & CRM Database", "Multi-currency (USD, GBP, EUR)", "Advanced Analytics", "Priority Email Support"]) },
+      { id: "plan_agency", name: "Agency", price: 45000, invoicesPerMonth: null, maxWorkspaces: 10, features: JSON.stringify(["Unlimited Invoices / month", "10 Workspaces", "Team Collaboration (5 seats)", "Clients & CRM Database", "Interactive Price Calculator", "Custom Branding", "Automated Overdue Reminders", "Dedicated Account Manager"]) },
+    ];
+    for (const plan of plans) {
+      const [existing] = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.name, plan.name)).limit(1);
+      if (!existing) {
+        await db.insert(subscriptionPlans).values(plan);
+        console.log(`✅ Seeded plan: ${plan.name}`);
+      }
+    }
+  }
+  seedPlans().catch(e => console.error("❌ Seed plans error:", e));
+
+  // Expiry check — run hourly
+  setInterval(async () => {
+    try {
+      const expired = await db.select().from(subscriptions)
+        .where(and(eq(subscriptions.status, "Active"), eq(subscriptions.autoRenew, false)));
+      const now = new Date();
+      for (const sub of expired) {
+        if (sub.expiryDate && new Date(sub.expiryDate) < now) {
+          await db.update(subscriptions).set({ status: "Expired", updatedAt: now.toISOString() }).where(eq(subscriptions.id, sub.id));
+          await db.update(users).set({ subscription: JSON.stringify({ plan: "Free", status: "Active" }) }).where(eq(users.uid, sub.userId));
+          console.log(`⏰ Subscription expired: ${sub.userId}`);
+        }
+      }
+    } catch (e) {
+      console.error("❌ Expiry check error:", e);
+    }
+  }, 3600000); // every hour
 }
 
 startServer();

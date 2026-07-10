@@ -225,3 +225,39 @@ export const appErrors = sqliteTable("app_errors", {
   userId: text("user_id"),
   timestamp: text("timestamp").notNull(),
 });
+
+export const subscriptionPlans = sqliteTable("subscription_plans", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  price: integer("price").notNull(),
+  currency: text("currency").notNull().default("GHS"),
+  invoicesPerMonth: integer("invoices_per_month"),
+  maxWorkspaces: integer("max_workspaces"),
+  features: text("features"),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+});
+
+export const subscriptions = sqliteTable("subscriptions", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.uid),
+  planId: text("plan_id").notNull().references(() => subscriptionPlans.id),
+  status: text("status").notNull().default("Active"),
+  startDate: text("start_date").notNull(),
+  expiryDate: text("expiry_date"),
+  autoRenew: integer("auto_renew", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const paymentTransactions = sqliteTable("payment_transactions", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.uid),
+  subscriptionId: text("subscription_id").references(() => subscriptions.id),
+  reference: text("reference").notNull().unique(),
+  amount: integer("amount").notNull(),
+  currency: text("currency").notNull().default("GHS"),
+  status: text("status").notNull(),
+  planName: text("plan_name"),
+  metadata: text("metadata"),
+  createdAt: text("created_at").notNull(),
+});

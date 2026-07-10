@@ -15,6 +15,13 @@
       "when": 1781695436268,
       "tag": "0001_dapper_captain_cross",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1783716185124,
+      "tag": "0002_subscription-tables",
+      "breakpoints": true
     }
   ]
 }
