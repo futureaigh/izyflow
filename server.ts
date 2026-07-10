@@ -16,7 +16,7 @@ import {
   staff, staffReceipts, cmsConfigs, analytics, appErrors,
   subscriptionPlans, subscriptions, paymentTransactions
 } from "./src/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql, gte, lte } from "drizzle-orm";
 import { withCache, invalidateCache, buildCacheKey, rateLimit } from "./src/lib/redis";
 
 
@@ -460,6 +460,40 @@ async function startServer() {
   });
 
   // ==========================================
+  // PLAN LIMIT HELPERS
+  // ==========================================
+
+  async function getPlanForUser(userId: string) {
+    const [sub] = await db.select().from(subscriptions)
+      .where(and(eq(subscriptions.userId, userId), eq(subscriptions.status, "Active")))
+      .orderBy(desc(subscriptions.createdAt)).limit(1);
+    if (!sub) return null;
+    const [plan] = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.id, sub.planId));
+    return plan || null;
+  }
+
+  async function checkPlanWorkspaceLimit(userId: string): Promise<string | null> {
+    const plan = await getPlanForUser(userId);
+    if (!plan || plan.maxWorkspaces === null) return null;
+    const [result] = await db.select({ count: sql<number>`count(*)` }).from(workspaces).where(eq(workspaces.ownerId, userId));
+    const count = Number(result?.count || 0);
+    if (count >= plan.maxWorkspaces) return `Plan limit reached: max ${plan.maxWorkspaces} workspaces`;
+    return null;
+  }
+
+  async function checkPlanInvoiceLimit(workspaceId: string, userId: string): Promise<string | null> {
+    const plan = await getPlanForUser(userId);
+    if (!plan || plan.invoicesPerMonth === null) return null;
+    const now = new Date();
+    const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const [result] = await db.select({ count: sql<number>`count(*)` }).from(invoices)
+      .where(and(eq(invoices.workspaceId, workspaceId), gte(invoices.createdAt, firstOfMonth)));
+    const count = Number(result?.count || 0);
+    if (count >= plan.invoicesPerMonth) return `Plan limit reached: max ${plan.invoicesPerMonth} invoices/month`;
+    return null;
+  }
+
+  // ==========================================
   // CLOUD DATABASE ENDPOINTS (TURSO + DRIZZLE)
   // ==========================================
 
@@ -559,6 +593,9 @@ async function startServer() {
 
   app.post("/api/workspaces", requireAuthMiddleware(), async (req: any, res) => {
     const userId = req.auth.userId;
+    const limitError = await checkPlanWorkspaceLimit(userId);
+    if (limitError) return res.status(403).json({ error: limitError });
+
     const data = req.body;
     try {
       const newWorkspace = {
@@ -965,8 +1002,13 @@ async function startServer() {
     }
   });
 
-  app.post("/api/workspaces/:workspaceId/invoices", requireAuthMiddleware(), async (req, res) => {
+  app.post("/api/workspaces/:workspaceId/invoices", requireAuthMiddleware(), async (req: any, res) => {
     const { workspaceId } = req.params;
+    const userId = req.auth.userId;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    const limitError = await checkPlanInvoiceLimit(workspaceId, userId);
+    if (limitError) return res.status(403).json({ error: limitError });
+
     const data = req.body;
     try {
       const newInvoice = {
