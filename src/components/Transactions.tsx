@@ -15,7 +15,7 @@ import {
   DropdownMenuContent, 
   DropdownMenuItem 
 } from './ui/dropdown-menu';
-import { Plus, Trash2, ArrowUpRight, ArrowDownRight, ArrowLeftRight, Loader2, Download, Upload, Sparkles, Send, Pencil, X, ChevronDown, User as UserIcon } from 'lucide-react';
+import { Plus, Trash2, ArrowUpRight, ArrowDownRight, ArrowLeftRight, Loader2, Download, Upload, Sparkles, Send, Pencil, X, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown, User as UserIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, parseISO, startOfMonth, endOfMonth, subDays, startOfYear, endOfYear } from 'date-fns';
 import { ImportTool } from './ImportTool';
@@ -90,6 +90,7 @@ export function Transactions({
   const [selectedTransactions, setSelectedTransactions] = useState<string[]>([]);
   const [isDeletingBulk, setIsDeletingBulk] = useState(false);
   const [savePayeeAsContact, setSavePayeeAsContact] = useState(false);
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
 
   // Calculated suggestions for Payee/Payer
   const suggestedPayees = useMemo(() => {
@@ -384,9 +385,15 @@ export function Transactions({
     return matchesSearch && matchesType && matchesCategory && matchesIsLoan && matchesStart && matchesEnd;
   });
 
+  const sortedTransactions = useMemo(() => {
+    return [...filteredTransactions].sort((a, b) =>
+      sortOrder === 'desc' ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date)
+    );
+  }, [filteredTransactions, sortOrder]);
+
   // Pagination Logic
-  const totalPages = Math.ceil(filteredTransactions.length / rowsPerPage);
-  const paginatedTransactions = filteredTransactions.slice(
+  const totalPages = Math.ceil(sortedTransactions.length / rowsPerPage);
+  const paginatedTransactions = sortedTransactions.slice(
     (currentPage - 1) * rowsPerPage,
     currentPage * rowsPerPage
   );
@@ -430,7 +437,7 @@ export function Transactions({
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, filterType, filterCategory, filterIsLoan, startDate, endDate]);
+  }, [searchQuery, filterType, filterCategory, filterIsLoan, startDate, endDate, sortOrder]);
 
   const handleExport = async (formatType: 'csv' | 'excel' | 'pdf') => {
     if (!workspace) return;
@@ -440,7 +447,7 @@ export function Transactions({
     try {
       // Fetch ALL transactions for the workspace to ensure "all data at once"
       const allTx = await api.getTransactions(workspace.id);
-      allTx.sort((a: any, b: any) => b.date.localeCompare(a.date));
+      allTx.sort((a: any, b: any) => sortOrder === 'desc' ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date));
       
       // Filter the full dataset manually to match current UI filters
       const dataToExport = allTx.filter(t => {
@@ -967,6 +974,17 @@ export function Transactions({
               className="h-10 rounded-xl border-border bg-background/50"
             />
           </div>
+          <div className="space-y-1.5">
+            <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider ml-1">Sort</Label>
+            <Button
+              variant="outline"
+              onClick={() => setSortOrder(o => o === 'desc' ? 'asc' : 'desc')}
+              className="w-full h-10 rounded-xl border-border bg-background/50 flex items-center justify-center gap-2"
+            >
+              {sortOrder === 'desc' ? <ArrowDown className="h-4 w-4" /> : <ArrowUp className="h-4 w-4" />}
+              <span className="text-xs font-bold">{sortOrder === 'desc' ? 'Newest' : 'Oldest'}</span>
+            </Button>
+          </div>
         </div>
 
         {/* Summary of Filtered Transactions */}
@@ -1048,7 +1066,12 @@ export function Transactions({
                         onChange={toggleSelectAll}
                       />
                     </TableHead>
-                    <TableHead className="text-muted-foreground">Date</TableHead>
+                    <TableHead className="text-muted-foreground cursor-pointer select-none" onClick={() => setSortOrder(o => o === 'desc' ? 'asc' : 'desc')}>
+                      <div className="flex items-center gap-1">
+                        Date
+                        {sortOrder === 'desc' ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />}
+                      </div>
+                    </TableHead>
                     <TableHead className="text-muted-foreground">Type</TableHead>
                     <TableHead className="text-muted-foreground">Category</TableHead>
                     {user?.preferences?.transactionFields?.showPayeePayer !== false && (
