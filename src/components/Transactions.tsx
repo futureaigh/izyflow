@@ -368,7 +368,7 @@ export function Transactions({
     }
   };
 
-  const filteredTransactions = transactions.filter(t => {
+  const filteredTransactions = useMemo(() => transactions.filter(t => {
     const matchesSearch = t.description.toLowerCase().includes(searchQuery.toLowerCase()) || 
                          t.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          (t.payeePayer || '').toLowerCase().includes(searchQuery.toLowerCase());
@@ -383,10 +383,13 @@ export function Transactions({
     const matchesEnd = !endDate || tDate <= parseLocalDate(endDate);
 
     return matchesSearch && matchesType && matchesCategory && matchesIsLoan && matchesStart && matchesEnd;
-  });
+  }), [transactions, searchQuery, filterType, filterCategory, filterIsLoan, startDate, endDate]);
 
-  const sortedTransactions = [...filteredTransactions].sort((a, b) =>
-    sortOrder === 'desc' ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date)
+  const sortedTransactions = useMemo(() => 
+    [...filteredTransactions].sort((a, b) =>
+      sortOrder === 'desc' ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date)
+    ),
+    [filteredTransactions, sortOrder]
   );
 
   // Pagination Logic
