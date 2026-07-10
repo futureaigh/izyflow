@@ -18,6 +18,7 @@ import { PublicCatalog } from './components/PublicCatalog';
 import { LandingPage } from './components/LandingPage';
 import { AuthModal } from './components/AuthModal';
 import { AdminPortal } from './components/AdminPortal';
+import { AcceptInvite } from './components/AcceptInvite';
 import { SupportChat } from './components/SupportChat';
 import { IzyAssistant } from './components/IzyAssistant';
 import { IzyBubble } from './components/IzyBubble';
@@ -540,6 +541,15 @@ export default function App({ auth }: AppProps) {
     return (
       <>
         <PublicCatalog workspaceId={publicWorkspaceId} />
+        <Toaster position="top-right" />
+      </>
+    );
+  }
+
+  if (typeof window !== 'undefined' && window.location.pathname === '/accept-invite') {
+    return (
+      <>
+        <AcceptInvite />
         <Toaster position="top-right" />
       </>
     );

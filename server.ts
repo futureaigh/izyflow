@@ -18,6 +18,8 @@ import {
 } from "./src/db/schema";
 import { eq, and, desc, sql, gte } from "drizzle-orm";
 import { withCache, invalidateCache, buildCacheKey, rateLimit } from "./src/lib/redis";
+import jwt from "jsonwebtoken";
+import { Resend } from "resend";
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -43,6 +45,10 @@ function safeParse(str: string | null | undefined) {
     return null;
   }
 }
+
+const INVITE_SECRET = process.env.JWT_INVITE_SECRET;
+const resend = new Resend(process.env.RESEND_API_KEY!);
+const APP_URL = process.env.APP_URL || "http://localhost:3000";
 
 async function startServer() {
   const app = express();
@@ -584,8 +590,20 @@ async function startServer() {
         buildCacheKey("user", userId, "workspaces"),
         60,
         async () => {
-          const rows = await db.select().from(workspaces).where(eq(workspaces.ownerId, userId));
-          return rows.map(w => ({
+          const [user] = await db.select().from(users).where(eq(users.uid, userId));
+          const userEmail = user?.email || "";
+          const owned = await db.select().from(workspaces).where(eq(workspaces.ownerId, userId));
+          let collaborated: typeof owned = [];
+          if (userEmail) {
+            const all = await db.select().from(workspaces).where(sql`${workspaces.collaborators} IS NOT NULL`);
+            collaborated = all.filter(w => {
+              const c = safeParse((w as any).collaborators) as string[] | null;
+              return c?.includes(userEmail) && w.ownerId !== userId;
+            });
+          }
+          const seen = new Set(owned.map(w => w.id));
+          const merged = [...owned, ...collaborated.filter(w => !seen.has(w.id))];
+          return merged.map(w => ({
             ...w,
             incomeCategories: safeParse(w.incomeCategories),
             expenseCategories: safeParse(w.expenseCategories),
@@ -685,6 +703,82 @@ async function startServer() {
     } catch (err) {
       console.error("Error in DELETE /api/workspaces/:id:", err);
       res.status(500).json({ error: "Failed to delete workspace" });
+    }
+  });
+
+  // --- WORKSPACE INVITATION ---
+  app.post("/api/workspaces/:id/invite", requireAuthMiddleware(), async (req: any, res) => {
+    const { id } = req.params;
+    const userId = req.auth.userId;
+    const { email } = req.body;
+    try {
+      if (!email || !email.includes("@")) return res.status(400).json({ error: "Valid email required" });
+
+      const [ws] = await db.select().from(workspaces).where(eq(workspaces.id, id));
+      if (!ws) return res.status(404).json({ error: "Workspace not found" });
+      if (ws.ownerId !== userId) return res.status(403).json({ error: "Only owner can invite" });
+
+      const [owner] = await db.select().from(users).where(eq(users.uid, userId));
+      const ownerSubscription = safeParse(owner?.subscription) || { plan: "Free" };
+      if (ownerSubscription.plan !== "Agency") return res.status(403).json({ error: "Agency plan required for collaborators" });
+
+      const collaborators: string[] = safeParse((ws as any).collaborators) || [];
+      if (collaborators.length >= 5) return res.status(403).json({ error: "Max 5 collaborators" });
+      if (collaborators.includes(email)) return res.status(400).json({ error: "Already a collaborator" });
+      if (email === owner?.email) return res.status(400).json({ error: "Cannot invite yourself" });
+
+      const token = jwt.sign({ workspaceId: id, email }, INVITE_SECRET, { expiresIn: "7d" });
+
+      const { error: sendError } = await resend.emails.send({
+        from: process.env.RESEND_FROM_EMAIL || "noreply@myizyflow.com",
+        to: email,
+        subject: `${owner?.displayName || "Someone"} invited you to ${ws.name} on IzyFlow`,
+        html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px">
+          <h2>You're invited to <strong>${ws.name}</strong></h2>
+          <p><strong>${owner?.displayName || "Someone"}</strong> invited you to collaborate on their IzyFlow workspace.</p>
+          <a href="${APP_URL}/accept-invite?token=${token}" style="display:inline-block;padding:12px 32px;background:#7c3aed;color:#fff;border-radius:12px;text-decoration:none;font-weight:bold;margin:16px 0">Accept Invitation</a>
+          <p style="color:#666;font-size:13px">This link expires in 7 days.</p>
+        </div>`,
+      });
+      if (sendError) {
+        console.error("Resend error:", sendError);
+        return res.status(500).json({ error: "Failed to send invitation" });
+      }
+
+      res.json({ message: "Invitation sent" });
+    } catch (err) {
+      console.error("Error in POST /api/workspaces/:id/invite:", err);
+      res.status(500).json({ error: "Failed to send invitation" });
+    }
+  });
+
+  app.post("/api/workspaces/accept-invite", requireAuthMiddleware(), async (req: any, res) => {
+    const userId = req.auth.userId;
+    const { token } = req.body;
+    try {
+      if (!token) return res.status(400).json({ error: "Token required" });
+
+      const payload = jwt.verify(token, INVITE_SECRET) as any;
+      const { workspaceId, email } = payload;
+
+      const [user] = await db.select().from(users).where(eq(users.uid, userId));
+      if (!user || user.email !== email) return res.status(403).json({ error: "This invitation was sent to a different email" });
+
+      const [ws] = await db.select().from(workspaces).where(eq(workspaces.id, workspaceId));
+      if (!ws) return res.status(404).json({ error: "Workspace not found" });
+
+      const collaborators: string[] = safeParse((ws as any).collaborators) || [];
+      if (collaborators.includes(email)) return res.json({ message: "Already a collaborator" });
+      if (collaborators.length >= 5) return res.status(403).json({ error: "Max collaborators reached" });
+
+      await db.update(workspaces).set({ collaborators: JSON.stringify([...collaborators, email]) }).where(eq(workspaces.id, workspaceId));
+      await invalidateCache(buildCacheKey("user", userId, "workspaces"));
+
+      res.json({ message: "Collaborator added" });
+    } catch (err: any) {
+      if (err.name === "TokenExpiredError" || err.name === "JsonWebTokenError") return res.status(400).json({ error: "Invalid or expired invitation" });
+      console.error("Error in POST /api/workspaces/accept-invite:", err);
+      res.status(500).json({ error: "Failed to accept invitation" });
     }
   });
 

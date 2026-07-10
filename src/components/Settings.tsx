@@ -1919,7 +1919,7 @@ export function Settings({ workspace, user }: SettingsProps) {
                     />
                     <Button
                       className="rounded-xl h-11 px-6 bg-brand text-brand-foreground hover:bg-brand/90 font-bold"
-                      onClick={() => {
+                      onClick={async () => {
                         const input = document.getElementById('invite-email') as HTMLInputElement;
                         const email = input?.value?.trim();
                         if (!email || !email.includes('@')) {
@@ -1927,19 +1927,14 @@ export function Settings({ workspace, user }: SettingsProps) {
                           return;
                         }
                         if (!workspace) return;
-                        const current = workspace.collaborators || [];
-                        if (current.includes(email)) {
-                          toast.error('Already a collaborator');
-                          return;
+                        try {
+                          await api.inviteCollaborator(workspace.id, email);
+                          window.dispatchEvent(new CustomEvent('refresh-workspaces'));
+                          input.value = '';
+                          toast.success('Invitation sent');
+                        } catch (err: any) {
+                          toast.error(err?.message || 'Failed to send invitation');
                         }
-                        if (current.length >= 5) {
-                          toast.error('Maximum 5 collaborators reached');
-                          return;
-                        }
-                        api.updateWorkspace(workspace.id, { collaborators: [...current, email] });
-                        window.dispatchEvent(new CustomEvent('refresh-workspaces'));
-                        input.value = '';
-                        toast.success('Collaborator added');
                       }}
                     >
                       <UserPlus className="h-4 w-4 mr-2" />
