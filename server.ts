@@ -290,6 +290,8 @@ async function startServer() {
       .set({ subscription: JSON.stringify({ ...currentSub, plan: planName, status: "Active", expiryDate: expiryDate.toISOString() }) })
       .where(eq(users.uid, userId));
 
+    await invalidateCache(buildCacheKey("user", userId, "profile"));
+
     return plan;
   }
 
