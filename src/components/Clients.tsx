@@ -64,8 +64,9 @@ export function Clients({ workspace, contacts, invoices }: ClientsProps) {
     let totalInvoiced = 0, totalPaid = 0, totalOutstanding = 0;
     clientInvoices.forEach(inv => {
       totalInvoiced += inv.amount || 0;
-      if (inv.status === 'paid') totalPaid += inv.amount || 0;
-      else if (inv.status !== 'draft') totalOutstanding += inv.amount || 0;
+      const status = (inv.status || '').toLowerCase();
+      if (status === 'paid') totalPaid += inv.amount || 0;
+      else if (status !== 'draft') totalOutstanding += inv.amount || 0;
     });
     return { totalInvoiced, totalPaid, totalOutstanding };
   }, [clientInvoices]);
@@ -438,9 +439,10 @@ export function Clients({ workspace, contacts, invoices }: ClientsProps) {
                   </TableHeader>
                   <TableBody>
                     {clientInvoices.map((inv) => {
-                      const isPaid = inv.status === 'paid';
-                      const isOverdue = inv.status === 'overdue';
-                      const isDraft = inv.status === 'draft';
+                      const status = (inv.status || '').toLowerCase();
+                      const isPaid = status === 'paid';
+                      const isOverdue = status === 'overdue';
+                      const isDraft = status === 'draft';
                       return (
                         <TableRow key={inv.id} className="hover:bg-muted/10 border-border">
                           <TableCell className="font-black text-slate-900 py-3">

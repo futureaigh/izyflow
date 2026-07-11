@@ -201,8 +201,10 @@ export function Dashboard({
       return true;
     });
     overdue.forEach(inv => {
-      api.updateInvoice(workspace.id, inv.id, { lastAutomatedReminderSentAt: now.toISOString() }).then(() => {
-        toast.warning(`Overdue: ${inv.clientName} — ${displayCurrency} ${inv.amount?.toLocaleString()} overdue since ${new Date(inv.dueDate).toLocaleDateString()}`);
+      api.remindInvoice(workspace.id, inv.id).then(() => {
+        toast.warning(`Automated Reminder Sent: ${inv.clientName} — ${displayCurrency} ${inv.amount?.toLocaleString()} overdue since ${new Date(inv.dueDate).toLocaleDateString()}`);
+      }).catch(err => {
+        console.error("Failed to send automated reminder", err);
       });
     });
   }, [workspace?.enableAutomatedReminders, invoices]);
@@ -528,8 +530,14 @@ export function Dashboard({
     return status.includes('Overdue') && i.status !== 'Paid';
   });
 
-  const sendReminder = (invoice: Invoice) => {
-    toast.success(`Reminder sent to ${invoice.clientName} for ${displayCurrency} ${convert(invoice.amount).toLocaleString()}`);
+  const sendReminder = async (invoice: Invoice) => {
+    if (!workspace) return;
+    try {
+      await api.remindInvoice(workspace.id, invoice.id);
+      toast.success(`Reminder sent to ${invoice.clientName} for ${displayCurrency} ${convert(invoice.amount).toLocaleString()}`);
+    } catch (err) {
+      toast.error("Failed to send reminder");
+    }
   };
 
   // Chart Data: Money In (Include loans for full transparency)
