@@ -250,6 +250,9 @@ async function startServer() {
   }
 
   async function upsertSubscription(userId: string, planName: string, status: string, reference: string, amount: number, currency: string) {
+    const [existingTxn] = await db.select().from(paymentTransactions).where(eq(paymentTransactions.reference, reference));
+    if (existingTxn) return;
+
     const [plan] = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.name, planName));
     if (!plan) return;
 
