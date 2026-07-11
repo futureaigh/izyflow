@@ -478,9 +478,19 @@ async function startServer() {
     const [sub] = await db.select().from(subscriptions)
       .where(and(eq(subscriptions.userId, userId), eq(subscriptions.status, "Active")))
       .orderBy(desc(subscriptions.createdAt)).limit(1);
-    if (!sub) return null;
+    if (!sub) {
+      const [freePlan] = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.name, "Free")).limit(1);
+      return freePlan || null;
+    }
     const [plan] = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.id, sub.planId));
     return plan || null;
+  }
+
+  async function checkFeatureAccess(userId: string, featureSubstring: string): Promise<boolean> {
+    const plan = await getPlanForUser(userId);
+    if (!plan || !plan.features) return false;
+    const features = safeParse(plan.features) || [];
+    return features.some((f: string) => f.toLowerCase().includes(featureSubstring.toLowerCase()));
   }
 
   async function checkPlanWorkspaceLimit(userId: string): Promise<string | null> {
@@ -620,7 +630,11 @@ async function startServer() {
     const limitError = await checkPlanWorkspaceLimit(userId);
     if (limitError) return res.status(403).json({ error: limitError });
 
+    const plan = await getPlanForUser(userId);
     const data = req.body;
+    if (plan?.name === "Free" && data.currency && data.currency !== "GHS") {
+      return res.status(403).json({ error: "Free plan only supports GHS currency" });
+    }
     try {
       const newWorkspace = {
         ...data,
@@ -1389,8 +1403,12 @@ async function startServer() {
     }
   });
 
-  app.post("/api/workspaces/:workspaceId/contacts", requireAuthMiddleware(), async (req, res) => {
+  app.post("/api/workspaces/:workspaceId/contacts", requireAuthMiddleware(), async (req: any, res) => {
     const { workspaceId } = req.params;
+    
+    const hasCRM = await checkFeatureAccess(req.auth.userId, "CRM");
+    if (!hasCRM) return res.status(403).json({ error: "Clients & CRM Database is only available on Pro and Agency plans" });
+
     const data = req.body;
     try {
       const id = data.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2));
@@ -1443,8 +1461,21 @@ async function startServer() {
     }
   });
 
-  app.post("/api/workspaces/:workspaceId/staff", requireAuthMiddleware(), async (req, res) => {
+  app.post("/api/workspaces/:workspaceId/staff", requireAuthMiddleware(), async (req: any, res) => {
     const { workspaceId } = req.params;
+    const userId = req.auth.userId;
+
+    const hasTeam = await checkFeatureAccess(userId, "Team Collaboration");
+    if (!hasTeam) return res.status(403).json({ error: "Team Collaboration is only available on the Agency plan" });
+
+    const plan = await getPlanForUser(userId);
+    if (plan?.name === "Agency") {
+      const [staffCountResult] = await db.select({ count: sql<number>`count(*)` }).from(staff).where(eq(staff.workspaceId, workspaceId));
+      if (Number(staffCountResult?.count || 0) >= 5) {
+        return res.status(403).json({ error: "Agency plan limit reached: max 5 staff members" });
+      }
+    }
+
     const data = req.body;
     try {
       const id = crypto.randomUUID();

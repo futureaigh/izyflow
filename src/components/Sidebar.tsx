@@ -67,10 +67,14 @@ export function Sidebar({
     { id: 'receipts', label: 'Staff Receipts', icon: Receipt, businessOnly: true },
     { id: 'accounts', label: 'Accounts', icon: Wallet },
     { id: 'clients', label: 'Clients', icon: Users },
-    { id: 'calculator', label: 'Price Calculator', icon: CalculatorIcon, businessOnly: true },
+    { id: 'calculator', label: 'Price Calculator', icon: CalculatorIcon, businessOnly: true, agencyOnly: true },
     { id: 'catalog', label: 'Catalog', icon: BookOpen, businessOnly: true },
     { id: 'settings', label: 'Settings', icon: SettingsIcon },
-  ].filter(item => !item.businessOnly || activeWorkspace?.type === 'Business');
+  ].filter(item => {
+    if (item.businessOnly && activeWorkspace?.type !== 'Business') return false;
+    if (item.agencyOnly && user?.subscription?.plan !== 'Agency') return false;
+    return true;
+  });
 
   const getWorkspaceIcon = (ws: Workspace | null) => {
     if (ws?.logoUrl) {

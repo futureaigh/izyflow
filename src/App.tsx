@@ -645,8 +645,23 @@ export default function App({ auth }: AppProps) {
     );
   }
 
+  let expiryDays: number | null = null;
+  if (user?.subscription?.expiryDate && user.subscription.plan !== 'Free') {
+    const expiry = new Date(user.subscription.expiryDate);
+    expiryDays = Math.ceil((expiry.getTime() - Date.now()) / (1000 * 3600 * 24));
+  }
+  const showExpiryWarning = expiryDays !== null && expiryDays <= 3;
+
   return (
-    <div className="flex h-screen w-full bg-background text-foreground overflow-hidden">
+    <div className="flex flex-col h-screen w-full overflow-hidden">
+      {showExpiryWarning && (
+        <div className="bg-destructive text-destructive-foreground text-center py-2 px-4 text-sm font-medium z-50">
+          {expiryDays! < 0 
+            ? `Your ${user!.subscription.plan} plan has expired. You are now on Free plan limits.`
+            : `Your ${user!.subscription.plan} plan expires in ${expiryDays} day${expiryDays === 1 ? '' : 's'}. Please renew to keep your premium features.`}
+        </div>
+      )}
+      <div className="flex flex-1 w-full bg-background text-foreground overflow-hidden">
       {/* Desktop Sidebar */}
       <div className="hidden md:flex w-64 shrink-0">
         <Sidebar 
@@ -986,6 +1001,7 @@ export default function App({ auth }: AppProps) {
         isOpen={isTourOpen}
         onComplete={handleTourComplete}
       />
+      </div>
     </div>
   );
 }
