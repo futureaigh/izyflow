@@ -384,7 +384,9 @@ export default function App({ auth }: AppProps) {
 
           if (data.status) {
             toast.success(`Successfully upgraded to ${data.plan} plan!`);
-            window.dispatchEvent(new CustomEvent('update-user'));
+            api.getMe().then(updatedProfile => {
+              window.dispatchEvent(new CustomEvent('update-user', { detail: updatedProfile }));
+            }).catch(console.error);
             window.history.replaceState({}, '', '/');
           } else {
             toast.error(data.message || 'Payment verification failed');
