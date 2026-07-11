@@ -362,7 +362,8 @@ async function startServer() {
 
   // Paystack Integration Endpoint
   app.post("/api/paystack/initialize", async (req, res) => {
-    const { email, amount, plan } = req.body;
+    const { email, plan } = req.body;
+    let { amount } = req.body;
     const secretKey = process.env.PAYSTACK_SECRET_KEY;
 
     if (!secretKey) {
@@ -370,6 +371,34 @@ async function startServer() {
     }
 
     try {
+      const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+      if (user) {
+        const [activeSub] = await db.select().from(subscriptions)
+          .where(and(eq(subscriptions.userId, user.uid), eq(subscriptions.status, "Active")))
+          .orderBy(desc(subscriptions.createdAt)).limit(1);
+          
+        if (activeSub && activeSub.expiryDate) {
+          const [currentPlan] = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.id, activeSub.planId));
+          const [newPlan] = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.name, plan));
+          
+          if (currentPlan && newPlan && newPlan.price > currentPlan.price) {
+            const expiry = new Date(activeSub.expiryDate);
+            const now = new Date();
+            const daysRemaining = Math.max(0, Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 3600 * 24)));
+            
+            if (daysRemaining > 0) {
+              const dailyRateOfOldPlan = currentPlan.price / 30;
+              const remainingValue = Math.floor(daysRemaining * dailyRateOfOldPlan);
+              const proratedAmount = newPlan.price - remainingValue;
+              
+              // Ensure we don't go below 0 (or a small minimum charge if required)
+              amount = Math.max(proratedAmount, 0); 
+              console.log(`[Proration] ${email} upgrading to ${plan}. Original: ${newPlan.price}, Prorated: ${amount}, Remaining Days: ${daysRemaining}`);
+            }
+          }
+        }
+      }
+
       const response = await fetch("https://api.paystack.co/transaction/initialize", {
         method: "POST",
         headers: {
