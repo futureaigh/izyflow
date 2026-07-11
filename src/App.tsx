@@ -371,15 +371,20 @@ export default function App({ auth }: AppProps) {
     if (reference && user) {
       const verifyPayment = async () => {
         try {
+          const token = await auth.getToken();
           const response = await fetch('/api/paystack/verify-payment', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
             body: JSON.stringify({ reference }),
           });
           const data = await response.json();
 
           if (data.status) {
             toast.success(`Successfully upgraded to ${data.plan} plan!`);
+            window.dispatchEvent(new CustomEvent('update-user'));
             window.history.replaceState({}, '', '/');
           } else {
             toast.error(data.message || 'Payment verification failed');
